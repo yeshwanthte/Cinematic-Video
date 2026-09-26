@@ -18,23 +18,33 @@ export function assistantConfigured(env) {
   return '';
 }
 
-function assistantModel(env, vision) {
-  if (assistantConfigured(env) === 'anthropic') return env.ASSISTANT_MODEL || DEFAULT_MODEL;
-  return vision ? env.HF_VISION_MODEL || 'Qwen/Qwen2.5-VL-7B-Instruct' : env.HF_TEXT_MODEL || 'openai/gpt-oss-20b';
+// Models that the Hugging Face router actually serves change over time, so each task
+// has a fallback chain (checked against router.huggingface.co/v1/models, 2026-09-26).
+// Set HF_VISION_MODEL / HF_TEXT_MODEL to put your own choice first.
+const HF_VISION_MODELS = ['Qwen/Qwen3-VL-30B-A3B-Instruct', 'google/gemma-3-12b-it', 'zai-org/GLM-4.5V'];
+const HF_TEXT_MODELS = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'google/gemma-3-12b-it'];
+const lastGood = { vision: null, text: null }; // remembered per warm function instance
+
+function hfCandidates(env, vision) {
+  const own = vision ? env.HF_VISION_MODEL : env.HF_TEXT_MODEL;
+  const list = vision ? HF_VISION_MODELS : HF_TEXT_MODELS;
+  const good = lastGood[vision ? 'vision' : 'text'];
+  return [...new Set([own, good, ...list].filter(Boolean))];
 }
 
-async function callHF(env, { system, content, maxTokens }) {
-  const vision = content.some((b) => b.type === 'image');
-  const parts = content.map((b) =>
-    b.type === 'image' ? { type: 'image_url', image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } } : { type: 'text', text: b.text }
-  );
+function assistantModel(env, vision) {
+  if (assistantConfigured(env) === 'anthropic') return env.ASSISTANT_MODEL || DEFAULT_MODEL;
+  return lastGood[vision ? 'vision' : 'text'] || hfCandidates(env, vision)[0];
+}
+
+async function callHFModel(env, model, { system, parts, vision, maxTokens }) {
   let res;
   try {
     res = await fetch(env.HF_ROUTER_URL || HF_ROUTER, {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.HF_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: assistantModel(env, vision),
+        model,
         max_tokens: maxTokens,
         messages: [
           { role: 'system', content: system },
@@ -49,10 +59,34 @@ async function callHF(env, { system, content, maxTokens }) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = data?.error?.message || data?.error || res.statusText;
+    const text = typeof msg === 'string' ? msg : JSON.stringify(msg);
     const code = res.status === 402 ? 'QUOTA_EXCEEDED' : res.status === 429 ? 'RATE_LIMITED' : res.status === 401 ? 'AUTH_FAILED' : res.status >= 500 ? 'PROVIDER_UNAVAILABLE' : 'PROVIDER_ERROR';
-    throw new StudioError(code, `Hugging Face assistant error (${res.status}): ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`, { providerStatus: res.status });
+    const e = new StudioError(code, `Hugging Face assistant error (${res.status}): ${text}`, { providerStatus: res.status });
+    // "model not supported / not found" → try the next model in the chain
+    e.tryNext = (res.status === 400 || res.status === 404 || res.status >= 500) && !/credit|quota|balance/i.test(text);
+    throw e;
   }
   return String(data?.choices?.[0]?.message?.content || '').trim();
+}
+
+async function callHF(env, { system, content, maxTokens }) {
+  const vision = content.some((b) => b.type === 'image');
+  const parts = content.map((b) =>
+    b.type === 'image' ? { type: 'image_url', image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } } : { type: 'text', text: b.text }
+  );
+  let lastErr;
+  for (const model of hfCandidates(env, vision)) {
+    try {
+      const out = await callHFModel(env, model, { system, parts, vision, maxTokens });
+      if (!out) throw Object.assign(new StudioError('PROVIDER_ERROR', `${model} returned an empty answer.`), { tryNext: true });
+      lastGood[vision ? 'vision' : 'text'] = model;
+      return out;
+    } catch (err) {
+      lastErr = err;
+      if (!err.tryNext) throw err;
+    }
+  }
+  throw lastErr;
 }
 
 async function callClaude(env, opts) {
