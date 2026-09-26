@@ -114,7 +114,19 @@ export class HuggingFaceProvider extends VideoProvider {
           const url = findVideoUrl(msg.data);
           if (!url) throw new StudioError('PROVIDER_ERROR', 'The Space finished but returned no video file.');
           const seed = msg.data.find((v) => typeof v === 'number');
-          yield { type: 'completed', outputs: [url], seed: seed ?? null };
+          // Fetch the file NOW, from this same server instance. Busy Spaces run several
+          // replicas and route by client, so a later request from a different server
+          // (or from the browser) can land on a replica that doesn't have the file (403).
+          yield { type: 'saving' };
+          const file = await this.#fetchFile(url, signal);
+          if (file) {
+            const b64 = toBase64(new Uint8Array(file.bytes));
+            const CHUNK = 512 * 1024;
+            for (let i = 0; i < b64.length; i += CHUNK) yield { type: 'file_chunk', data: b64.slice(i, i + CHUNK) };
+            yield { type: 'completed', outputs: [url], seed: seed ?? null, inline: { mime: file.mime, size: file.bytes.byteLength } };
+          } else {
+            yield { type: 'completed', outputs: [url], seed: seed ?? null };
+          }
           return;
         }
       }
@@ -154,6 +166,25 @@ export class HuggingFaceProvider extends VideoProvider {
     return { user: me.name, plan: me.isPro ? 'PRO' : 'Free', quotaNote: me.isPro ? '≈40 min GPU/day' : '≈5 min GPU/day' };
   }
 
+  async #fetchFile(url, signal) {
+    for (let i = 0; i < 8; i++) {
+      if (signal?.aborted) return null;
+      try {
+        const res = await fetch(url, { headers: this.fileHeaders(url), cache: 'no-store', signal: AbortSignal.timeout(30_000) });
+        if (res.ok) {
+          const bytes = await res.arrayBuffer();
+          if (bytes.byteLength > 0) return { bytes, mime: res.headers.get('content-type') || 'video/mp4' };
+        } else {
+          await res.body?.cancel().catch(() => {});
+        }
+      } catch {
+        /* retry */
+      }
+      await new Promise((r) => setTimeout(r, 300 + i * 200));
+    }
+    return null;
+  }
+
   /** Only proxy files served by Hugging Face Spaces (or an explicitly configured override host). */
   isAllowedFileUrl(url) {
     try {
@@ -175,6 +206,13 @@ export class HuggingFaceProvider extends VideoProvider {
 }
 
 // ------------------------------------------------------------------ helpers
+
+function toBase64(bytes) {
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
 
 function dataUriToBlob(dataUri) {
   const m = /^data:([^;]+);base64,(.+)$/.exec(dataUri || '');
