@@ -216,10 +216,34 @@ const routes = {
     } else {
       ({ videoUrl } = await provider.getResult(taskIdFrom(url.searchParams.get('id'))));
     }
-    const upstream = await fetch(videoUrl, { headers }).catch((e) => {
-      throw new StudioError('NETWORK', `Could not fetch the video file: ${e.message}`);
-    });
-    if (!upstream.ok || !upstream.body) throw new StudioError('PROVIDER_ERROR', `Could not fetch the video file (${upstream.status}). Space files are temporary — generate again if it has expired.`);
+    // Busy Spaces run several replicas behind one URL; the finished file exists only on the
+    // replica that generated it, and the others answer 403/404. Retrying lets the load
+    // balancer route us to the right replica (usually within a few attempts).
+    const attempts = provider.mode === 'stream' ? 20 : 1;
+    let upstream;
+    let lastStatus = 0;
+    for (let i = 0; i < attempts; i++) {
+      upstream = await fetch(videoUrl, { headers, cache: 'no-store' }).catch((e) => {
+        if (i === attempts - 1) throw new StudioError('NETWORK', `Could not fetch the video file: ${e.message}`);
+        return null;
+      });
+      if (upstream?.ok && upstream.body) break;
+      lastStatus = upstream?.status || 0;
+      try {
+        await upstream?.body?.cancel();
+      } catch {
+        /* ignore */
+      }
+      upstream = null;
+      if (![403, 404, 429, 500, 502, 503, 504, 0].includes(lastStatus)) break;
+      await new Promise((r) => setTimeout(r, 400 + i * 150));
+    }
+    if (!upstream) {
+      throw new StudioError(
+        'PROVIDER_ERROR',
+        `The Space finished the video but kept refusing the file download (HTTP ${lastStatus} after ${attempts} tries). This happens when a busy Space runs several copies and the file lives on another copy, or the Space already deleted it. Click “Try again” to regenerate.`
+      );
+    }
     const name = (url.searchParams.get('name') || 'cinematic-ai-studio').replace(/[^\w.-]+/g, '-').slice(0, 80);
     const type = upstream.headers.get('content-type') || 'video/mp4';
     const ext = /webm/.test(type) ? 'webm' : 'mp4';
