@@ -1114,9 +1114,23 @@ async function runGeneration(gen, img, hooks = {}) {
       // 06 — finalize: copy the temporary Space file into this browser so it never expires.
       hooks.progressDone?.();
       step('final', 'active', 'Saving the video from the Space to this browser');
-      const blob = await api.downloadBlob(gen.provider, null, `gen-${gen.id}`, r.outputs[0]);
-      await imageStore.put(`video_${gen.id}`, blob);
-      set({ status: 'succeeded', progress: 1, videoUrl: r.outputs[0], localVideo: true, videoBytes: blob.size, seedUsed: r.seed, completedAt: new Date().toISOString() });
+      let blob = null;
+      let saveError = null;
+      for (let attempt = 0; attempt < 2 && !blob; attempt++) {
+        try {
+          blob = await api.downloadBlob(gen.provider, null, `gen-${gen.id}`, r.outputs[0]);
+        } catch (err) {
+          saveError = err;
+        }
+      }
+      if (blob) {
+        await imageStore.put(`video_${gen.id}`, blob);
+        set({ status: 'succeeded', progress: 1, videoUrl: r.outputs[0], localVideo: true, videoBytes: blob.size, seedUsed: r.seed, completedAt: new Date().toISOString() });
+      } else {
+        // Couldn't copy it — still show the real result straight from the Space.
+        set({ status: 'succeeded', progress: 1, videoUrl: r.outputs[0], localVideo: false, remoteOnly: true, seedUsed: r.seed, completedAt: new Date().toISOString(), saveError: errInfo(saveError).message });
+        toast('Video ready, but not saved to this browser', 'Playing it directly from the Space. Download it soon — Space files are temporary.');
+      }
       hooks.success?.(gen);
     } else {
       set({ taskId: r.taskId, status: 'queued', estimatedCredits: r.estimatedCredits, submittedAt: r.submittedAt, pollIntervalMs: r.pollIntervalMs });
@@ -1372,7 +1386,7 @@ async function showResult(gen, { fromJob = false, ui } = {}) {
   const video = $('#video');
   let url;
   try {
-    url = gen.localVideo ? await localVideoUrl(gen.id) : fromJob ? gen.videoUrl : await refreshUrlIfStale(gen);
+    url = gen.localVideo ? await localVideoUrl(gen.id) : fromJob || gen.remoteOnly ? gen.videoUrl : await refreshUrlIfStale(gen);
   } catch (e) {
     toast('Could not load the saved video', errInfo(e).message, 'err');
     return;
@@ -1383,8 +1397,26 @@ async function showResult(gen, { fromJob = false, ui } = {}) {
   });
   video.src = url;
   video.muted = true;
+  let loadedOk = false;
+  for (let attempt = 0; attempt < (gen.remoteOnly ? 6 : 1) && !loadedOk; attempt++) {
+    try {
+      if (attempt) {
+        await sleep(800);
+        const again = new Promise((resolve, reject) => {
+          video.onloadeddata = resolve;
+          video.onerror = () => reject(new Error('The browser could not load the video file.'));
+        });
+        video.src = `${url}${url.includes('?') ? '&' : '?'}r=${attempt}`;
+        await again;
+      } else await loaded;
+      loadedOk = true;
+    } catch (e) {
+      if (gen.remoteOnly && attempt < 5) continue;
+      loadedOk = e;
+    }
+  }
   try {
-    await loaded;
+    if (loadedOk !== true) throw loadedOk;
   } catch (e) {
     if (fromJob) {
       ui?.set('final', 'failed', e.message);
@@ -1392,6 +1424,7 @@ async function showResult(gen, { fromJob = false, ui } = {}) {
       return;
     }
     if (gen.localVideo) return toast('Could not play the saved video', e.message, 'err');
+    if (gen.remoteOnly) return toast('This video is no longer on the Space', 'Space files are temporary and it was not saved to this browser. Generate it again.', 'err');
     // Stale URL? refresh once.
     try {
       gen.videoUrlAt = null;
@@ -1532,14 +1565,15 @@ async function downloadGen(gen) {
   const name = `${(p?.name || 'cinematic').replace(/[^\w-]+/g, '-')}-${gen.label.replace(/[^\w-]+/g, '-')}-${gen.id.slice(-5)}`.toLowerCase();
   try {
     let blob = gen.localVideo ? await imageStore.get(`video_${gen.id}`) : null;
-    if (!blob && !gen.localVideo) try {
+    if (!blob && gen.remoteOnly) blob = await api.downloadBlob(gen.provider, null, name, gen.videoUrl).catch(() => null);
+    if (!blob && !gen.localVideo && !gen.remoteOnly) try {
       const url = await refreshUrlIfStale(gen);
       const r = await fetch(url, { mode: 'cors' });
       if (r.ok) blob = await r.blob();
     } catch {
       /* CDN without CORS → try backend proxy */
     }
-    if (!blob && !gen.localVideo) {
+    if (!blob && !gen.localVideo && !gen.remoteOnly) {
       try {
         blob = await api.downloadBlob(gen.provider, gen.taskId, name);
       } catch {
