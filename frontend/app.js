@@ -897,7 +897,7 @@ async function runAnalysis(img) {
       const preview = await makeJpegDataUri(img.bitmap, 768, 0.82);
       result = await api.analyze(preview);
     } catch (e) {
-      toast('AI photo analysis failed', `${errInfo(e).message} — using on-device analysis.`, 'err');
+      toast('AI photo analysis unavailable — used the on-device scan instead', errInfo(e).message);
     }
   }
   if (!result) result = await analyzeOnDevice(img.bitmap);
