@@ -1,0 +1,19 @@
+{
+  "name": "cinematic-ai-studio",
+  "version": "1.0.0",
+  "description": "Cinematic AI Studio — bring your photos to life with real AI image-to-video generation.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node dev-server.js",
+    "sync-config": "node scripts/sync-config.js",
+    "test": "node --test tests/unit/*.test.js",
+    "test:e2e": "node tests/e2e/run-e2e.js"
+  },
+  "dependencies": {
+    "@gradio/client": "2.7.0"
+  }
+}

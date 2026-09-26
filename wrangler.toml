@@ -1,0 +1,8 @@
+# Optional: deploy the API to Cloudflare Workers instead of Vercel.
+# Secrets are NOT stored here:  npx wrangler secret put RUNWAY_API_KEY
+name = "cinematic-ai-studio-api"
+main = "adapters/cloudflare-worker.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://your-username.github.io"

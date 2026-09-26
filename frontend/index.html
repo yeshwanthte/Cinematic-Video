@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Cinematic AI Studio — Bring Your Photos to Life</title>
+  <meta name="description" content="Transform a still image into a cinematic moving scene with AI." />
+  <meta name="theme-color" content="#07080B" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2307080B'/%3E%3Cpath d='M9 22V10l14 6z' fill='%23C8F55A'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></symbol>
+    <symbol id="i-restart" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.4L19 10l-5.2 1.6L12 17l-1.8-5.4L5 10l5.2-1.6zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" fill="currentColor"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5m0 0L7.5 9.5M12 5l4.5 4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <a class="brand" href="#home" data-nav="home" aria-label="Cinematic AI Studio home">
+      <span class="brand-mark"><svg viewBox="0 0 32 32"><path d="M10 23V9l13 7z" fill="currentColor"/></svg></span>
+      <span class="brand-name">Cinematic <em>AI</em> Studio</span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="#studio" data-nav="studio">Studio</a>
+      <a href="#story" data-nav="story">Story</a>
+      <a href="#projects" data-nav="projects">Projects</a>
+      <a href="#settings" data-nav="settings">Settings</a>
+    </nav>
+    <button class="status-pill" id="backendStatus" data-nav="settings" title="Backend connection">
+      <span class="dot"></span><span class="label">Checking backend…</span>
+    </button>
+  </header>
+
+  <main>
+    <!-- ============================== HOME -->
+    <section class="view view-home" data-view="home">
+      <div class="hero">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <p class="eyebrow">Image → Video · Real AI generation</p>
+        <h1>Bring Your Photos<br />to Life.</h1>
+        <p class="hero-sub">Transform a still image into a cinematic moving scene with AI.</p>
+        <div class="hero-cta">
+          <button class="btn btn-primary btn-lg" data-nav="studio">Create Video</button>
+          <button class="btn btn-ghost btn-lg" data-nav="story">Story Mode</button>
+        </div>
+        <ul class="hero-facts">
+          <li><strong id="heroModel">Wan 2.2 · Free</strong><span id="heroModelSub">Free · open-source model</span></li>
+          <li><strong>Server-side keys</strong><span>Your secret never reaches the browser</span></li>
+          <li><strong>Honest status</strong><span>Progress straight from the provider</span></li>
+        </ul>
+      </div>
+
+      <div class="section-head">
+        <h2>Start from a look</h2>
+        <p>Each card preloads a motion recipe tuned for that kind of photograph.</p>
+      </div>
+      <div class="examples" id="examples"></div>
+    </section>
+
+    <!-- ============================== STUDIO -->
+    <section class="view view-studio" data-view="studio" hidden>
+      <div class="studio">
+        <div class="stage-col">
+          <div class="stage" id="stage" data-state="empty">
+            <!-- empty -->
+            <label class="dropzone" id="dropzone" for="fileInput">
+              <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple hidden />
+              <span class="drop-icon"><svg><use href="#i-upload"/></svg></span>
+              <span class="drop-title">Drop your photo here</span>
+              <span class="drop-or">or</span>
+              <span class="btn btn-primary">Upload Photo</span>
+              <span class="drop-formats">JPG · JPEG · PNG · WEBP &nbsp;·&nbsp; up to 40 MB</span>
+            </label>
+
+            <!-- preview -->
+            <div class="preview" id="preview">
+              <div class="frame" id="frame">
+                <img id="previewImg" alt="Uploaded photo preview" draggable="false" />
+                <div class="frame-mask" id="frameMask"><div class="frame-window" id="frameWindow"><span class="frame-tag" id="frameTag">16:9</span></div></div>
+              </div>
+              <p class="frame-hint">Drag the frame to choose what the video keeps.</p>
+            </div>
+
+            <!-- generating -->
+            <div class="gen" id="gen" aria-live="polite">
+              <div class="gen-backdrop" id="genBackdrop"></div>
+              <div class="gen-panel">
+                <p class="eyebrow" id="genEyebrow">Generating with Runway Gen-4.5</p>
+                <ol class="gen-steps" id="genSteps"></ol>
+                <div class="gen-progress" id="genProgressWrap" hidden>
+                  <div class="bar"><span id="genBar"></span></div>
+                  <div class="gen-progress-meta"><span id="genPct">—</span><span class="muted">reported by provider</span></div>
+                </div>
+                <div class="gen-meta">
+                  <span>Elapsed <b id="genElapsed">0:00</b></span>
+                  <span>Task <code id="genTask">—</code></span>
+                  <span id="genCredits"></span>
+                </div>
+                <div class="gen-error" id="genError" hidden>
+                  <h3 id="genErrTitle"></h3>
+                  <p id="genErrMsg"></p>
+                  <details><summary>Technical details</summary><pre id="genErrDetails"></pre></details>
+                  <div class="row gap">
+                    <button class="btn btn-primary" id="genRetry">Try again</button>
+                    <button class="btn btn-ghost" id="genBack">Edit motion</button>
+                    <button class="btn btn-ghost" id="genSettings" data-nav="settings">Settings</button>
+                  </div>
+                </div>
+                <div class="row gap gen-actions" id="genActions">
+                  <button class="btn btn-ghost" id="genCancel">Cancel generation</button>
+                  <button class="btn btn-ghost" id="genBackground" hidden>Keep editing (continues in background)</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- result -->
+            <div class="result" id="result">
+              <div class="player" id="player">
+                <video id="video" playsinline loop preload="auto"></video>
+                <div class="compare" id="compare" hidden>
+                  <img id="compareImg" alt="Original photo" />
+                  <div class="compare-handle" id="compareHandle"><span></span></div>
+                  <span class="compare-label left">Original photo</span>
+                  <span class="compare-label right">Generated video</span>
+                </div>
+                <div class="controls">
+                  <button class="icon-btn" id="vPlay" aria-label="Play"><svg><use href="#i-play"/></svg></button>
+                  <button class="icon-btn" id="vRestart" aria-label="Restart"><svg><use href="#i-restart"/></svg></button>
+                  <span class="time" id="vTime">0:00 / 0:00</span>
+                  <input type="range" id="vSeek" min="0" max="1000" value="0" aria-label="Seek" />
+                  <button class="icon-btn" id="vMute" aria-label="Mute"><svg><use href="#i-vol"/></svg></button>
+                  <button class="icon-btn" id="vCompare" aria-label="Before / after comparison" title="Before / After">⇆</button>
+                  <button class="icon-btn" id="vFull" aria-label="Fullscreen"><svg><use href="#i-full"/></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stage-bar" id="stageBar" hidden>
+            <div class="file-meta" id="fileMeta"></div>
+            <div class="row gap-s">
+              <label class="btn btn-ghost btn-s" for="fileInput">Add photos</label>
+              <button class="btn btn-ghost btn-s" id="removeImage"><svg class="i"><use href="#i-x"/></svg>Remove</button>
+            </div>
+          </div>
+
+          <div class="filmstrip" id="filmstrip" hidden></div>
+
+          <!-- result details -->
+          <div class="result-panel" id="resultPanel" hidden>
+            <div class="result-head">
+              <div>
+                <p class="eyebrow ok">Video generated</p>
+                <h3 id="resultTitle">Generation</h3>
+              </div>
+              <div class="row gap-s wrap">
+                <button class="btn btn-primary" id="btnDownload"><svg class="i"><use href="#i-down"/></svg>Download Video</button>
+                <button class="btn btn-ghost" id="btnAgain">Generate Again</button>
+                <button class="btn btn-ghost" id="btnEdit">Edit Motion</button>
+                <button class="btn btn-ghost" id="btnVariation">Create Variation</button>
+              </div>
+            </div>
+            <dl class="meta-grid" id="resultMeta"></dl>
+            <details class="prompt-used"><summary>Prompt sent to the model</summary><p id="resultPrompt"></p><p class="muted" id="resultNeg"></p></details>
+
+            <div class="variations" id="variations" hidden>
+              <div class="section-head sm"><h4>Generate variation</h4><p>Same photo, different camera language. Each variation is a separate real generation.</p></div>
+              <div class="var-grid" id="varGrid"></div>
+            </div>
+          </div>
+
+          <div class="history" id="history" hidden>
+            <div class="section-head sm"><h4>Generations in this project</h4></div>
+            <div class="history-row" id="historyRow"></div>
+          </div>
+        </div>
+
+        <!-- ============ INSPECTOR -->
+        <aside class="inspector" id="inspector" aria-label="Motion controls">
+          <div class="insp-scroll">
+            <section class="panel analysis" id="analysisPanel">
+              <header><span class="step-no">01</span><h3>AI understands the image</h3><span class="badge" id="analysisSource">Waiting for photo</span></header>
+              <p class="muted" id="analysisSummary">Upload a photo to analyse subject, scene and suitable motion.</p>
+              <div class="chips" id="categoryChips"></div>
+              <div class="recommend" id="recommend" hidden>
+                <p><span class="muted">Recommended</span> <strong id="recommendText"></strong></p>
+                <button class="btn btn-accent btn-s" id="applyRecommend">Apply</button>
+              </div>
+            </section>
+
+            <section class="panel">
+              <header><span class="step-no">02</span><h3>Style</h3></header>
+              <div class="styles" id="styleCards"></div>
+            </section>
+
+            <section class="panel">
+              <header><span class="step-no">03</span><h3>Camera movement</h3></header>
+              <div class="cam-grid" id="cameraCards"></div>
+            </section>
+
+            <section class="panel">
+              <header><span class="step-no">04</span><h3>Subject movement</h3><span class="muted small">up to 3</span></header>
+              <div class="chips" id="subjectChips"></div>
+            </section>
+
+            <section class="panel">
+              <header><span class="step-no">05</span><h3>Environment</h3><span class="muted small">up to 3</span></header>
+              <div class="chips" id="envChips"></div>
+            </section>
+
+            <section class="panel">
+              <header><span class="step-no">06</span><h3>Motion</h3></header>
+              <div class="segmented" id="intensitySeg" role="radiogroup"></div>
+            </section>
+
+            <section class="panel prompt-panel">
+              <header><span class="step-no">07</span><h3>Describe the motion</h3><span class="badge" id="promptMode">Auto</span></header>
+              <textarea id="promptInput" rows="6" maxlength="1000" placeholder="Make this photograph feel alive with a slow cinematic camera push-in. The subject remains natural and consistent. Gentle wind moves the clothing and surrounding foliage."></textarea>
+              <div class="prompt-tools">
+                <span class="counter" id="promptCount">0 / 1000</span>
+                <div class="row gap-s">
+                  <button class="btn btn-ghost btn-s" id="rebuildPrompt" title="Rebuild the prompt from the controls">Rebuild</button>
+                  <button class="btn btn-accent btn-s" id="enhancePrompt"><svg class="i"><use href="#i-spark"/></svg>Enhance Prompt</button>
+                </div>
+              </div>
+              <p class="note" id="promptNote"></p>
+              <p class="warn" id="promptWarn" hidden></p>
+            </section>
+
+            <section class="panel">
+              <header><span class="step-no">08</span><h3>Protection</h3></header>
+              <div class="chips" id="protectChips"></div>
+              <p class="note" id="negNote"></p>
+            </section>
+
+            <section class="panel">
+              <header><span class="step-no">09</span><h3>Video settings</h3></header>
+              <label class="field-label">AI Model</label>
+              <div class="models" id="modelCards"></div>
+              <label class="field-label">Duration</label>
+              <div class="segmented" id="durationSeg"></div>
+              <label class="field-label">Resolution</label>
+              <div class="segmented" id="resolutionSeg"></div>
+              <label class="field-label">Aspect ratio</label>
+              <div class="segmented wrap" id="ratioSeg"></div>
+              <p class="note" id="ratioNote"></p>
+              <div class="inline-fields">
+                <label class="toggle" id="audioToggleWrap" hidden><input type="checkbox" id="audioToggle" /><span></span>Native audio</label>
+                <label class="seed">Seed <input type="number" id="seedInput" min="0" max="4294967295" placeholder="random" inputmode="numeric" /></label>
+              </div>
+            </section>
+          </div>
+
+          <div class="generate-bar">
+            <div class="cost" id="costLine">—</div>
+            <button class="btn btn-primary btn-generate" id="generateBtn" disabled>Generate Video</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============================== STORY -->
+    <section class="view view-story" data-view="story" hidden>
+      <div class="page-head">
+        <div>
+          <p class="eyebrow">Story Mode · beta</p>
+          <h1 class="h-page">Photo sequence → scenes</h1>
+          <p class="muted">Every photo becomes a scene with its own motion, duration and prompt. Each scene is generated as a real, separate clip.</p>
+        </div>
+        <div class="row gap-s">
+          <label class="btn btn-ghost" for="storyInput">Add photos</label>
+          <input type="file" id="storyInput" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple hidden />
+          <button class="btn btn-primary" id="storyGenerate" disabled>Generate all scenes</button>
+        </div>
+      </div>
+      <div class="story-empty" id="storyEmpty">
+        <label class="dropzone small" for="storyInput"><span class="drop-title">Add 2 or more photos to build a story</span><span class="btn btn-primary">Choose photos</span></label>
+      </div>
+      <ol class="scenes" id="scenes"></ol>
+      <div class="panel render-card" id="renderCard" hidden>
+        <header><h3>Final video</h3><span class="badge warn">Not available yet</span></header>
+        <p class="muted">Combining scene clips into one video needs a backend render step (e.g. FFmpeg on a worker). That step is <strong>not implemented yet</strong> — <code>/api/render</code> returns 501. Download each scene clip and assemble them in your editor for now. Transitions you choose are saved with the project for when rendering ships.</p>
+        <button class="btn btn-ghost" id="renderTry">Check render endpoint</button>
+      </div>
+    </section>
+
+    <!-- ============================== PROJECTS -->
+    <section class="view view-projects" data-view="projects" hidden>
+      <div class="page-head">
+        <div>
+          <p class="eyebrow">Library</p>
+          <h1 class="h-page">Projects</h1>
+          <p class="muted">Stored in this browser. Source photos live in IndexedDB; videos are fetched fresh from the provider when opened.</p>
+        </div>
+        <button class="btn btn-primary" data-nav="studio">New project</button>
+      </div>
+      <div class="projects" id="projectGrid"></div>
+      <p class="muted empty" id="projectsEmpty">No projects yet. Upload a photo in the Studio to start one.</p>
+    </section>
+
+    <!-- ============================== SETTINGS -->
+    <section class="view view-settings" data-view="settings" hidden>
+      <div class="page-head">
+        <div>
+          <p class="eyebrow">Configuration</p>
+          <h1 class="h-page">Settings</h1>
+        </div>
+      </div>
+      <div class="settings-grid">
+        <section class="panel">
+          <header><h3>Backend</h3></header>
+          <label class="field-label" for="apiBase">API endpoint</label>
+          <input class="input" id="apiBase" placeholder="(same origin)  e.g. https://your-project.vercel.app" autocomplete="off" />
+          <label class="field-label" for="accessCode">Studio access code <span class="muted">(only if STUDIO_ACCESS_CODE is set on the backend)</span></label>
+          <input class="input" id="accessCode" type="password" autocomplete="off" placeholder="Your private studio code — NOT your Runway key" />
+          <div class="row gap-s">
+            <button class="btn btn-primary" id="saveBackend">Save &amp; test connection</button>
+          </div>
+          <div class="diag" id="diag"></div>
+        </section>
+
+        <section class="panel">
+          <header><h3>Provider &amp; model</h3></header>
+          <label class="field-label" for="providerSelect">AI provider</label>
+          <select class="input" id="providerSelect"></select>
+          <label class="field-label" for="modelSelect">Default model</label>
+          <select class="input" id="modelSelect"></select>
+          <div class="model-info" id="modelInfo"></div>
+        </section>
+
+        <section class="panel">
+          <header><h3>Generation preferences</h3></header>
+          <label class="field-label">Default motion</label>
+          <div class="segmented" id="prefIntensity"></div>
+          <label class="toggle"><input type="checkbox" id="prefAnalyze" /><span></span>Analyse photos automatically</label>
+          <label class="toggle"><input type="checkbox" id="prefProtect" /><span></span>Enable face / identity / flicker protection by default</label>
+          <label class="field-label" for="prefTimeout">Stop waiting after (minutes)</label>
+          <input class="input" id="prefTimeout" type="number" min="3" max="60" />
+          <p class="note">If a generation exceeds this, the studio stops polling and shows a timeout. The task keeps running at the provider — reopen the project later to pick it up.</p>
+        </section>
+
+        <section class="panel">
+          <header><h3>Connecting the AI (free)</h3></header>
+          <p class="muted">The studio uses a <strong>free Hugging Face token</strong> kept on your server. It is never entered here, never stored in the browser, and never sent from your browser.</p>
+          <ol class="howto">
+            <li>Create a free account at <a href="https://huggingface.co/join" target="_blank" rel="noopener">huggingface.co</a>, then <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">Settings → Access Tokens</a> → New token (type <b>Read</b>).</li>
+            <li>Vercel → your project → <b>Settings → Environment Variables</b> → add <code>HF_TOKEN</code>.</li>
+            <li>Recommended: add <code>STUDIO_ACCESS_CODE</code> and enter the same code above.</li>
+            <li>Redeploy, then press <b>Save &amp; test connection</b>.</li>
+            <li>Optional, paid: add <code>RUNWAY_API_KEY</code> to unlock Runway Gen-4.5 / Veo 3.1 in the model list.</li>
+          </ol>
+          <p class="note">Free accounts get ≈5 minutes of ZeroGPU time per day (≈5–10 short clips). It resets 24 h after first use.</p>
+          <p class="note">Local development: copy <code>.env.example</code> to <code>.env</code> and run <code>npm run dev</code>.</p>
+        </section>
+
+        <section class="panel">
+          <header><h3>Audio</h3><span class="badge">Roadmap</span></header>
+          <p class="muted">The free Wan 2.2 models generate silent video. Native audio exists only on the paid Veo 3.1 models (via Runway). Music, ambient beds, AI sound effects, voiceover and uploaded audio are <strong>not implemented</strong>; the project data model reserves an <code>audio</code> track for them.</p>
+        </section>
+
+        <section class="panel">
+          <header><h3>Data</h3></header>
+          <p class="muted">Projects, thumbnails and source photos are stored only in this browser.</p>
+          <button class="btn btn-danger" id="clearData">Delete all local projects</button>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="drag-veil" id="dragVeil"><div>Drop to add photos</div></div>
+</body>
+</html>
