@@ -83,6 +83,7 @@ export class StudioApi {
     const dec = new TextDecoder();
     let buf = '';
     let final = null;
+    const chunks = [];
     try {
       for (;;) {
         let chunk;
@@ -107,6 +108,10 @@ export class StudioApi {
             continue;
           }
           if (ev.type === 'error') throw new ApiError({ ...(ev.error || {}), code: ev.error?.code || 'PROVIDER_ERROR' });
+          if (ev.type === 'file_chunk') {
+            chunks.push(ev.data);
+            continue;
+          }
           if (ev.type === 'completed') final = ev;
           if (ev.type !== 'heartbeat') onEvent(ev);
         }
@@ -121,7 +126,17 @@ export class StudioApi {
         retryable: true,
       });
     }
-    return { stream: true, ...final };
+    let blob = null;
+    if (final.inline && chunks.length) {
+      const parts = chunks.map((c) => {
+        const bin = atob(c);
+        const u = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        return u;
+      });
+      blob = new Blob(parts, { type: final.inline.mime || 'video/mp4' });
+    }
+    return { stream: true, ...final, blob };
   }
 
   health({ account = false } = {}) {
