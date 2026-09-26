@@ -1091,6 +1091,9 @@ async function runGeneration(gen, img, hooks = {}) {
       } else if (ev.type === 'started') {
         set({ status: 'running' });
         step('render', 'active', 'GPU allocated — the model is running');
+      } else if (ev.type === 'saving') {
+        hooks.progressDone?.();
+        step('final', 'active', 'Receiving the video from the Space');
       } else if (ev.type === 'progress') {
         set({ status: 'running', progress: ev.progress });
         step('render', 'active', `${ev.desc} step ${Math.min(ev.step + 1, ev.steps)} of ${ev.steps} — reported by the Space`);
@@ -1114,7 +1117,7 @@ async function runGeneration(gen, img, hooks = {}) {
       // 06 — finalize: copy the temporary Space file into this browser so it never expires.
       hooks.progressDone?.();
       step('final', 'active', 'Saving the video from the Space to this browser');
-      let blob = null;
+      let blob = r.blob || null; // delivered inside the stream by the same server that ran the job
       let saveError = null;
       for (let attempt = 0; attempt < 2 && !blob; attempt++) {
         try {
