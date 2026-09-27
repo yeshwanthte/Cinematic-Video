@@ -149,6 +149,10 @@ export class StudioApi {
   generate(job, { onEvent, signal, timeoutMs = 90_000 } = {}) {
     return this.#call('generate', { method: 'POST', body: job, timeoutMs, onEvent, signal });
   }
+  /** Image generation / editing — always streamed. */
+  image(job, { onEvent, signal, timeoutMs = 280_000 } = {}) {
+    return this.#call('image', { method: 'POST', body: job, timeoutMs, onEvent: onEvent || (() => {}), signal });
+  }
   status(provider, taskId) {
     return this.#call(`status?provider=${encodeURIComponent(provider)}&id=${encodeURIComponent(taskId)}`, { timeoutMs: 30_000 });
   }

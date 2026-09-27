@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
+  <script type="module" src="js/image-studio.js"></script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -35,6 +36,7 @@
     </a>
     <nav class="nav" aria-label="Primary">
       <a href="#studio" data-nav="studio">Studio</a>
+      <a href="#image" data-nav="image">Image</a>
       <a href="#story" data-nav="story">Story</a>
       <a href="#projects" data-nav="projects">Projects</a>
       <a href="#settings" data-nav="settings">Settings</a>
@@ -54,6 +56,7 @@
         <p class="hero-sub">Transform a still image into a cinematic moving scene with AI.</p>
         <div class="hero-cta">
           <button class="btn btn-primary btn-lg" data-nav="studio">Create Video</button>
+          <button class="btn btn-ghost btn-lg" data-nav="image">Image Studio</button>
           <button class="btn btn-ghost btn-lg" data-nav="story">Story Mode</button>
         </div>
         <ul class="hero-facts">
@@ -267,6 +270,128 @@
           <div class="generate-bar">
             <div class="cost" id="costLine">—</div>
             <button class="btn btn-primary btn-generate" id="generateBtn" disabled>Generate Video</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============================== IMAGE STUDIO -->
+    <section class="view view-image" data-view="image" hidden>
+      <div class="studio">
+        <div class="stage-col">
+          <div class="stage istage" id="istage" data-state="empty">
+            <label class="dropzone" id="idropzone" for="iFileInput">
+              <input type="file" id="iFileInput" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple hidden />
+              <span class="drop-icon"><svg><use href="#i-upload"/></svg></span>
+              <span class="drop-title">Drop the photo to edit</span>
+              <span class="drop-or">or</span>
+              <span class="btn btn-primary">Upload Photo</span>
+              <span class="drop-formats">JPG · PNG · WEBP &nbsp;·&nbsp; add up to 3 reference photos</span>
+            </label>
+            <div class="icreate-empty" id="icreateEmpty">
+              <p class="eyebrow">Create from text</p>
+              <h3>Describe the image you want</h3>
+              <p class="muted">Write a prompt on the right, pick a style and aspect ratio, then generate.</p>
+            </div>
+            <div class="iview" id="iview">
+              <div class="icompare" id="icompare">
+                <img id="iAfter" alt="Generated image" />
+                <img id="iBefore" alt="Original photo" />
+                <div class="compare-handle" id="iHandle"><span></span></div>
+                <span class="compare-label left" id="iLabelL">Original</span>
+                <span class="compare-label right" id="iLabelR">Edited</span>
+              </div>
+            </div>
+            <div class="gen" id="igen" aria-live="polite">
+              <div class="gen-backdrop"></div>
+              <div class="gen-panel">
+                <p class="eyebrow" id="iGenEyebrow">Generating</p>
+                <ol class="gen-steps" id="iGenSteps"></ol>
+                <div class="gen-progress" id="iProgWrap" hidden><div class="bar"><span id="iBar"></span></div>
+                  <div class="gen-progress-meta"><span id="iPct">—</span><span class="muted">reported by the Space</span></div></div>
+                <div class="gen-meta"><span>Elapsed <b id="iElapsed">0:00</b></span></div>
+                <div class="gen-error" id="iGenError" hidden>
+                  <h3 id="iErrTitle"></h3><p id="iErrMsg"></p>
+                  <div class="row gap"><button class="btn btn-primary" id="iRetry">Try again</button><button class="btn btn-ghost" id="iBack">Back to editing</button></div>
+                </div>
+                <div class="row gap gen-actions" id="iGenActions"><button class="btn btn-ghost" id="iCancel">Cancel</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="irefs" id="irefs" hidden></div>
+
+          <div class="result-panel" id="iResultPanel" hidden>
+            <div class="result-head">
+              <div><p class="eyebrow ok">Image ready</p><h3 id="iResultTitle">Result</h3></div>
+              <div class="row gap-s wrap">
+                <button class="btn btn-primary" id="iDownload"><svg class="i"><use href="#i-down"/></svg>Download PNG</button>
+                <button class="btn btn-ghost" id="iVariation">New variation</button>
+                <button class="btn btn-ghost" id="iUseAsInput">Keep editing this</button>
+                <button class="btn btn-accent" id="iAnimate">Animate in Video Studio →</button>
+              </div>
+            </div>
+            <dl class="meta-grid" id="iMeta"></dl>
+            <details class="prompt-used"><summary>Prompt sent to the model</summary><p id="iPromptUsed"></p></details>
+            <p class="note">The model is instructed to keep faces and identity; no model can guarantee a perfect match every time. Compare with the slider — if anything drifted, try “New variation”.</p>
+          </div>
+
+          <div class="history" id="iHistory" hidden>
+            <div class="section-head sm"><h4>Your images</h4><p>Saved in this browser.</p></div>
+            <div class="igrid" id="iGrid"></div>
+          </div>
+        </div>
+
+        <aside class="inspector" aria-label="Image controls">
+          <div class="insp-scroll">
+            <section class="panel">
+              <header><span class="step-no">01</span><h3>Mode</h3></header>
+              <div class="segmented" id="iModeSeg">
+                <button data-imode="edit" class="on">Edit a photo</button>
+                <button data-imode="create">Create from text</button>
+              </div>
+            </section>
+
+            <section class="panel" id="iPresetPanel">
+              <header><span class="step-no">02</span><h3 id="iPresetTitle">Quick edits</h3></header>
+              <div class="styles" id="iPresets"></div>
+            </section>
+
+            <section class="panel prompt-panel">
+              <header><span class="step-no">03</span><h3 id="iPromptTitle">What should change?</h3><span class="badge" id="iPromptBadge">Your words</span></header>
+              <textarea id="iPrompt" rows="5" maxlength="1000" placeholder="e.g. Change the background to a sunlit beach at golden hour."></textarea>
+              <div class="prompt-tools">
+                <span class="counter" id="iCount">0 / 1000</span>
+                <button class="btn btn-accent btn-s" id="iEnhance"><svg class="i"><use href="#i-spark"/></svg>Enhance Prompt</button>
+              </div>
+              <p class="note" id="iPromptNote">Tip: say exactly what to change. Everything you lock below is added as “keep the same” instructions.</p>
+            </section>
+
+            <section class="panel" id="iLockPanel">
+              <header><span class="step-no">04</span><h3>Keep exactly the same</h3></header>
+              <div class="chips" id="iLocks"></div>
+              <p class="note" id="iLockNote"></p>
+            </section>
+
+            <section class="panel" id="iStylePanel" hidden>
+              <header><span class="step-no">04</span><h3>Style</h3></header>
+              <div class="chips" id="iStyles"></div>
+            </section>
+
+            <section class="panel">
+              <header><span class="step-no">05</span><h3>Model &amp; output</h3></header>
+              <div class="models" id="iModels"></div>
+              <div id="iAspectWrap" hidden>
+                <label class="field-label">Aspect ratio</label>
+                <div class="segmented wrap" id="iAspects"></div>
+              </div>
+              <p class="note" id="iModelNote"></p>
+              <div class="inline-fields"><label class="seed">Seed <input type="number" id="iSeed" min="0" max="2147483647" placeholder="random" inputmode="numeric" /></label></div>
+            </section>
+          </div>
+          <div class="generate-bar">
+            <div class="cost" id="iCost">Free · uses your daily ZeroGPU allowance</div>
+            <button class="btn btn-primary btn-generate" id="iGenerate" disabled>Generate Image</button>
           </div>
         </aside>
       </div>

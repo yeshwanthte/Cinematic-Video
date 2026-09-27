@@ -157,7 +157,7 @@ async function checkHealth({ account = true } = {}) {
       }
       if (p.accountError?.code === 'FORBIDDEN') {
         pill.dataset.state = 'warn';
-        pill.querySelector('.label').textContent = 'Access code required';
+        pill.querySelector('.label').textContent = state.settings.accessCode ? 'Access code incorrect' : 'Access code required';
       }
     }
     if (state.catalogSource !== 'backend') {
@@ -178,7 +178,7 @@ async function checkHealth({ account = true } = {}) {
 // ====================================================================== routing
 function route() {
   const v = (location.hash || '#home').slice(1).split('/')[0];
-  setView(['home', 'studio', 'story', 'projects', 'settings'].includes(v) ? v : 'home', false);
+  setView(['home', 'studio', 'image', 'story', 'projects', 'settings'].includes(v) ? v : 'home', false);
 }
 function setView(name, push = true) {
   $$('.view').forEach((s) => (s.hidden = s.dataset.view !== name));
@@ -218,13 +218,19 @@ function bindGlobal() {
     const files = [...(e.dataTransfer?.files || [])];
     if (!files.length) return;
     const onStory = !$('[data-view="story"]').hidden;
-    if (onStory) addStoryFiles(files);
+    if (!$('[data-view="image"]').hidden) window.dispatchEvent(new CustomEvent('cas:image-files', { detail: { files } }));
+    else if (onStory) addStoryFiles(files);
     else {
       if ($('[data-view="studio"]').hidden) setView('studio');
       handleFiles(files);
     }
   });
   window.addEventListener('resize', () => requestAnimationFrame(renderFrame));
+  // Image Studio → "Animate in Video Studio"
+  window.addEventListener('cas:send-to-video', (e) => {
+    setView('studio');
+    handleFiles([e.detail.file]);
+  });
 }
 
 // ====================================================================== home
@@ -1792,9 +1798,20 @@ function renderDiag() {
       lines.push([`${p.label} ${id === 'huggingface' ? 'token' : 'API key'}`, p.configured ? 'Configured on server' : optional ? `Not set (optional, paid) — ${envName}` : `Missing — set ${envName}`, p.configured ? 'ok' : optional ? 'mid' : 'bad']);
       if (p.account?.user) lines.push([`${p.label} account`, `@${esc(p.account.user)} · ${esc(p.account.plan)} (${esc(p.account.quotaNote)})`, 'ok']);
       else if (p.account) lines.push([`${p.label} credits`, `${p.account.creditBalance?.toLocaleString() ?? '—'}`, p.account.creditBalance > 0 ? 'ok' : 'mid']);
-      if (p.accountError) lines.push([`${p.label} account`, esc(p.accountError.message), p.accountError.code === 'FORBIDDEN' ? 'mid' : 'bad']);
+      if (p.accountError && p.accountError.code !== 'FORBIDDEN') lines.push([`${p.label} account`, esc(p.accountError.message), 'bad']);
     }
-    lines.push(['Access code', h.accessCodeRequired ? (state.settings.accessCode ? 'Required · code entered' : 'Required · enter it above') : 'Not required (set STUDIO_ACCESS_CODE for public deployments)', h.accessCodeRequired && !state.settings.accessCode ? 'mid' : 'ok']);
+    const codeRejected = Object.values(h.providers || {}).some((p) => p.accountError?.code === 'FORBIDDEN');
+    lines.push([
+      'Access code',
+      !h.accessCodeRequired
+        ? 'Not required (set STUDIO_ACCESS_CODE for public deployments)'
+        : !state.settings.accessCode
+          ? 'Required · enter it above'
+          : codeRejected
+            ? 'Incorrect — it doesn’t match STUDIO_ACCESS_CODE on Vercel (check capitals/spaces)'
+            : 'Accepted ✓',
+      !h.accessCodeRequired || (state.settings.accessCode && !codeRejected) ? 'ok' : 'bad',
+    ]);
     lines.push(['AI assistant', h.assistant ? `Enabled via ${h.assistantProvider === 'huggingface' ? 'Hugging Face (free monthly credits)' : 'Claude'} — analysis + Enhance Prompt` : 'Off — built-in engine used', h.assistant ? 'ok' : 'mid']);
   }
   d.innerHTML = lines.map(([k, v, c]) => `<div class="line"><span>${k}</span><span class="${c}">${v}</span></div>`).join('');

@@ -105,3 +105,46 @@ export function validateJob(body) {
     },
   };
 }
+
+export function getImageCapabilities(providerId, modelId) {
+  const provider = MODELS.imageProviders?.[providerId];
+  if (!provider) throw new StudioError('INVALID_REQUEST', `Unknown image provider "${providerId}".`);
+  const model = provider.models[modelId];
+  if (!model) throw new StudioError('UNSUPPORTED_OPTION', `Image model "${modelId}" is not available.`);
+  return model;
+}
+
+export function validateImageJob(body) {
+  if (!body || typeof body !== 'object') throw new StudioError('INVALID_REQUEST', 'Request body must be JSON.');
+  const providerId = body.provider || 'huggingface';
+  const modelId = body.model || 'qwen-edit-fast';
+  const caps = getImageCapabilities(providerId, modelId);
+  const mode = body.mode === 'create' ? 'create' : 'edit';
+  if (!caps.modes.includes(mode)) {
+    throw new StudioError('UNSUPPORTED_OPTION', `${caps.label} does not support ${mode === 'edit' ? 'editing an uploaded photo' : 'creating from text only'}.`);
+  }
+  const images = Array.isArray(body.images) ? body.images : [];
+  if (mode === 'edit' && !images.length) throw new StudioError('INVALID_IMAGE', 'Upload the photo you want to edit.');
+  if (images.length > (caps.maxImages || 0)) throw new StudioError('UNSUPPORTED_OPTION', `${caps.label} accepts up to ${caps.maxImages} image(s).`);
+  let total = 0;
+  for (const img of images) {
+    validateImage(img);
+    total += img.length;
+  }
+  if (total > MODELS.limits.maxImageDataUriBytes) throw new StudioError('IMAGE_TOO_LARGE', 'The reference images are too large together. Use fewer or smaller photos.');
+  const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+  if (!prompt) throw new StudioError('INVALID_REQUEST', 'Describe what you want to change or create.');
+  if (prompt.length > (caps.promptMaxChars || 1000)) throw new StudioError('PROMPT_TOO_LONG', `Prompt is ${prompt.length} characters; the limit is ${caps.promptMaxChars}.`);
+  let seed;
+  if (body.seed !== undefined && body.seed !== null && body.seed !== '') {
+    seed = Number(body.seed);
+    if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647) throw new StudioError('INVALID_REQUEST', 'Seed must be an integer between 0 and 2147483647.');
+  }
+  let width;
+  let height;
+  if (mode === 'create' && caps.sizes) {
+    const size = caps.sizes.find((z) => z.aspect === body.aspect) || caps.sizes[0];
+    ({ width, height } = size);
+  }
+  return { providerId, caps, job: { model: modelId, mode, images: mode === 'edit' ? images : [], prompt, seed, width, height } };
+}

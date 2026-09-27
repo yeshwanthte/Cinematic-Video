@@ -3,7 +3,7 @@
 
 import MODELS from '../models.js';
 import { StudioError, toStudioError } from './errors.js';
-import { validateJob, getCapabilities } from './validate.js';
+import { validateJob, getCapabilities, validateImageJob } from './validate.js';
 import { getProvider, listProviderIds } from '../providers/index.js';
 import { assistantConfigured, analyzeImage, enhancePrompt } from './assistant.js';
 
@@ -81,7 +81,7 @@ function taskIdFrom(value) {
 
 // Streams provider events as NDJSON (one JSON object per line). Closing the
 // connection (browser cancel / tab closed) aborts the upstream job.
-function streamGeneration(request, env, provider, providerId, caps, job) {
+function streamGeneration(request, env, provider, providerId, caps, job, method = 'generateStream') {
   const enc = new TextEncoder();
   const abort = new AbortController();
   request.signal?.addEventListener?.('abort', () => abort.abort(), { once: true });
@@ -98,7 +98,7 @@ function streamGeneration(request, env, provider, providerId, caps, job) {
       send({ type: 'submitted', provider: providerId, model: job.model, submittedAt: new Date().toISOString() });
       heartbeat = setInterval(() => send({ type: 'heartbeat', t: Date.now() }), 10_000);
       try {
-        for await (const ev of provider.generateStream(job, caps, { signal: abort.signal })) send(ev);
+        for await (const ev of provider[method](job, caps, { signal: abort.signal })) send(ev);
       } catch (err) {
         const e = toStudioError(err);
         if (e.code === 'INTERNAL') console.error('[studio] stream error', err);
@@ -158,7 +158,7 @@ const routes = {
   },
 
   async models(request, env) {
-    const out = { defaultProvider: MODELS.defaultProvider, defaultModel: MODELS.defaultModel, limits: MODELS.limits, providers: {} };
+    const out = { defaultProvider: MODELS.defaultProvider, defaultModel: MODELS.defaultModel, limits: MODELS.limits, providers: {}, imageProviders: MODELS.imageProviders };
     for (const [id, p] of Object.entries(MODELS.providers)) {
       out.providers[id] = { ...p, configured: getProvider(id, env).isConfigured() };
     }
@@ -181,6 +181,17 @@ const routes = {
       pollIntervalMs: MODELS.providers[providerId].pollIntervalMs,
       submittedAt: new Date().toISOString(),
     });
+  },
+
+  // Image generation / editing (streamed, like free video)
+  async image(request, env) {
+    if (request.method !== 'POST') throw new StudioError('INVALID_REQUEST', 'Use POST.');
+    requireAccess(request, env);
+    const body = await readJson(request);
+    const { providerId, caps, job } = validateImageJob(body);
+    const provider = getProvider(providerId, env);
+    if (typeof provider.generateImageStream !== 'function') throw new StudioError('NOT_IMPLEMENTED', `${providerId} does not support image generation.`);
+    return streamGeneration(request, env, provider, providerId, caps, job, 'generateImageStream');
   },
 
   async status(request, env) {
@@ -276,7 +287,7 @@ const routes = {
     } catch {
       /* default */
     }
-    return json(request, env, 200, await enhancePrompt(env, { text: String(body.text || '').slice(0, 2000), context: body.context, maxChars }));
+    return json(request, env, 200, await enhancePrompt(env, { text: String(body.text || '').slice(0, 2000), context: body.context, maxChars, kind: body.kind }));
   },
 
   // Story Mode final render (clip stitching) is intentionally NOT implemented yet.

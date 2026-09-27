@@ -171,7 +171,29 @@ Only recommend subject motions that physically make sense (no blinking without a
   return { ...json, source: 'ai', assistant: assistantConfigured(env), model: assistantModel(env, true) };
 }
 
-export async function enhancePrompt(env, { text, context, maxChars = 1000 }) {
+const IMAGE_SYSTEM = (maxChars, mode) => `You are a senior prompt engineer for instruction-based image ${mode === 'create' ? 'generation (FLUX)' : 'editing models (Qwen-Image-Edit, FLUX Kontext)'}.
+Rewrite the user's request into ONE precise prompt. Rules:
+${mode === 'create'
+  ? '- Describe subject, setting, composition, lens/camera, lighting, mood and style concretely.\n- Photorealistic unless the user asks for a style.'
+  : `- Start with the exact change requested, stated as a direct instruction (e.g. "Change the background to…").
+- Then state explicitly what must stay the same: the person's face, facial features, identity, skin tone, hairstyle, expression, body shape and pose, and the camera angle/composition — unless the user asked to change one of them.
+- Name visible elements by what they are ("the woman in the red saree"), never invent new people.
+- Keep lighting and shadows consistent with the scene; photorealistic.`}
+- Respect the selected options in the context JSON.
+- Plain prose, 1–4 sentences, no lists or quotes, under ${maxChars} characters.
+Reply with the prompt text only.`;
+
+export async function enhancePrompt(env, { text, context, maxChars = 1000, kind = 'video' }) {
+  if (kind === 'image-edit' || kind === 'image-create') {
+    const out = await callClaude(env, {
+      system: IMAGE_SYSTEM(maxChars, kind === 'image-create' ? 'create' : 'edit'),
+      content: [{ type: 'text', text: `User request: ${text || '(none)'}\nContext: ${JSON.stringify(context || {})}` }],
+      maxTokens: 500,
+    });
+    const prompt = out.replace(/^["'\s]+|["'\s]+$/g, '').slice(0, maxChars);
+    if (!prompt) throw new StudioError('PROVIDER_ERROR', 'AI assistant returned an empty prompt.');
+    return { prompt, source: 'ai', assistant: assistantConfigured(env), model: assistantModel(env, false) };
+  }
   const system = `You are a senior prompt engineer for image-to-video models (Runway Gen-4.5, Veo).
 Rewrite the user's idea into ONE professional motion prompt. Rules:
 - The image already defines what is visible. Describe MOTION only: subject action, environmental motion, camera motion, intensity, direction, speed and timing.

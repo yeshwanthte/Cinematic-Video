@@ -364,6 +364,118 @@
       }
     }
   },
+  "imageProviders": {
+    "huggingface": {
+      "label": "Hugging Face (free)",
+      "free": true,
+      "models": {
+        "qwen-edit-fast": {
+          "label": "Qwen Image Edit 2511 · Free",
+          "quality": "Best at keeping faces & identity · 4-step fast",
+          "description": "Alibaba's open Qwen-Image-Edit-2511 (Lightning 4-step) on the Space linoyts/Qwen-Image-Edit-2511-Fast. Strong subject and face consistency; accepts up to 3 reference images.",
+          "modes": [
+            "edit"
+          ],
+          "maxImages": 3,
+          "space": "linoyts/Qwen-Image-Edit-2511-Fast",
+          "endpoint": "/infer",
+          "params": {
+            "image": "images",
+            "imageIsGallery": true,
+            "prompt": "prompt",
+            "seed": "seed",
+            "randomize": "randomize_seed",
+            "fixed": {
+              "true_guidance_scale": 1,
+              "num_inference_steps": 4,
+              "rewrite_prompt": false
+            }
+          },
+          "gpu": "light",
+          "promptMaxChars": 1000
+        },
+        "flux-kontext": {
+          "label": "FLUX.1 Kontext [dev] · Free",
+          "quality": "High-quality edits & text-to-image · slower",
+          "description": "Black Forest Labs' FLUX.1 Kontext [dev] on their official Space. Edits one image from an instruction, or creates from text when no image is given. Uses more GPU per image (28 steps).",
+          "modes": [
+            "edit",
+            "create"
+          ],
+          "maxImages": 1,
+          "space": "black-forest-labs/FLUX.1-Kontext-Dev",
+          "endpoint": "/infer",
+          "params": {
+            "image": "input_image",
+            "prompt": "prompt",
+            "seed": "seed",
+            "randomize": "randomize_seed",
+            "fixed": {
+              "guidance_scale": 2.5,
+              "steps": 28
+            }
+          },
+          "gpu": "heavy",
+          "promptMaxChars": 1000
+        },
+        "flux-schnell": {
+          "label": "FLUX.1 [schnell] · Free",
+          "quality": "Fast text-to-image · 1024 px",
+          "description": "Black Forest Labs' FLUX.1 [schnell] on their official Space. Creates new images from text in 4 steps.",
+          "modes": [
+            "create"
+          ],
+          "maxImages": 0,
+          "space": "black-forest-labs/FLUX.1-schnell",
+          "endpoint": "/infer",
+          "params": {
+            "prompt": "prompt",
+            "seed": "seed",
+            "randomize": "randomize_seed",
+            "width": "width",
+            "height": "height",
+            "fixed": {
+              "num_inference_steps": 4
+            }
+          },
+          "sizes": [
+            {
+              "aspect": "1:1",
+              "width": 1024,
+              "height": 1024
+            },
+            {
+              "aspect": "16:9",
+              "width": 1344,
+              "height": 768
+            },
+            {
+              "aspect": "9:16",
+              "width": 768,
+              "height": 1344
+            },
+            {
+              "aspect": "4:5",
+              "width": 896,
+              "height": 1120
+            },
+            {
+              "aspect": "3:2",
+              "width": 1216,
+              "height": 832
+            },
+            {
+              "aspect": "2:3",
+              "width": 832,
+              "height": 1216
+            }
+          ],
+          "gpu": "light",
+          "promptMaxChars": 1000
+        }
+      }
+    }
+  },
   "limits": {
     "maxImageDataUriBytes": 4000000,
     "acceptedMime": [

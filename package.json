@@ -11,7 +11,7 @@
     "dev": "node dev-server.js",
     "sync-config": "node scripts/sync-config.js",
     "test": "node --test tests/unit/*.test.js",
-    "test:e2e": "node tests/e2e/run-e2e.js"
+    "test:e2e": "node tests/e2e/run-e2e.js && node tests/e2e/run-image-e2e.js"
   },
   "dependencies": {
     "@gradio/client": "2.7.0"

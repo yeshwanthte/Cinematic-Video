@@ -76,6 +76,30 @@ tests/                unit tests + full browser e2e (with a real Gradio test Spa
 
 ---
 
+---
+
+## Image Studio (free)
+
+Edit a photo from a written instruction, or create a new image from text. It runs on the same free Hugging Face token and daily GPU allowance as the video models.
+
+| Model | What it's for | Space |
+|---|---|---|
+| **Qwen Image Edit 2511 · Free** (default) | Edits that keep the same person (background, outfit, lighting, restoration). Accepts up to 3 reference photos | `linoyts/Qwen-Image-Edit-2511-Fast` (4-step) |
+| **FLUX.1 Kontext [dev] · Free** | High-quality single-photo edits and text-to-image. Uses more GPU | `black-forest-labs/FLUX.1-Kontext-Dev` |
+| **FLUX.1 [schnell] · Free** | Fast text-to-image, 6 aspect ratios up to 1344 px | `black-forest-labs/FLUX.1-schnell` |
+
+**Features:**
+- 12 quick-edit presets and 6 create presets
+- **"Keep exactly the same" locks**: face and identity, skin tone, hair, expression, pose, framing (plus clothing, background and lighting). Each lock is written into the prompt as an explicit preservation instruction.
+- Enhance Prompt, using the AI assistant or the built-in rewrite
+- Before/after slider
+- Download as PNG
+- **Keep editing this**, to chain several edits
+- **Animate in Video Studio →**, which sends the result straight to the video generator
+- Seed control and a history saved in your browser
+
+**What to expect:** these open models are among the best available for keeping identity, and the locks tell them exactly what must not change. Still, **no model can guarantee a perfect match every time.** Always check with the before/after slider. If a face drifts, click **New variation** (it uses a new seed) or make the instruction more specific.
+
 ## 4. Optional extras
 
 - **GitHub Pages frontend:** in `frontend/config.js`, set `apiBase: 'https://<project>.vercel.app'`. In the repo go to Settings → Pages → Source: **GitHub Actions** (the workflow is included). In Vercel, add `ALLOWED_ORIGINS=https://<user>.github.io` and redeploy.

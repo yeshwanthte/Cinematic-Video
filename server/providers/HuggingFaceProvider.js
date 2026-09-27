@@ -50,20 +50,9 @@ export class HuggingFaceProvider extends VideoProvider {
    *  errors are thrown as StudioError
    */
   async *generateStream(job, caps, { signal } = {}) {
-    if (!this.isConfigured()) {
-      throw new StudioError('NOT_CONFIGURED', 'HF_TOKEN is not set on the backend. Create a free token at huggingface.co/settings/tokens and add it as an environment variable.');
-    }
-    const space = this.spaceFor(caps, job.model);
-    let client;
-    try {
-      client = await Client.connect(space, this.#connectOptions());
-    } catch (err) {
-      throw mapConnectError(err, space);
-    }
-
-    const image = dataUriToBlob(job.image);
+    this.#requireToken();
     const params = {
-      [caps.params?.image || 'input_image']: image,
+      [caps.params?.image || 'input_image']: dataUriToBlob(job.image),
       prompt: job.prompt,
       steps: caps.params?.steps ?? 4,
       negative_prompt: [caps.params?.baseNegative, job.negativePrompt].filter(Boolean).join(', '),
@@ -71,10 +60,62 @@ export class HuggingFaceProvider extends VideoProvider {
       seed: Number.isInteger(job.seed) ? job.seed : 42,
       randomize_seed: !Number.isInteger(job.seed),
     };
+    yield* this.#runSpace({
+      space: this.spaceFor(caps, job.model),
+      endpoint: caps.endpoint || '/generate_video',
+      params,
+      signal,
+      findOutput: findVideoUrl,
+      what: 'video',
+    });
+  }
+
+  /**
+   * Image generation / editing on a ZeroGPU Space (Qwen-Image-Edit, FLUX Kontext, FLUX schnell).
+   * job: { model, mode:'edit'|'create', images:[dataUri], prompt, seed, width, height }
+   */
+  async *generateImageStream(job, caps, { signal } = {}) {
+    this.#requireToken();
+    const p = caps.params || {};
+    const params = { ...(p.fixed || {}) };
+    params[p.prompt || 'prompt'] = job.prompt;
+    if (job.images?.length && p.image) {
+      const blobs = job.images.map(dataUriToBlob);
+      params[p.image] = p.imageIsGallery ? blobs.map((b) => ({ image: b, caption: null })) : blobs[0];
+    }
+    if (p.seed) params[p.seed] = Number.isInteger(job.seed) ? job.seed : 42;
+    if (p.randomize) params[p.randomize] = !Number.isInteger(job.seed);
+    if (job.width && p.width) params[p.width] = job.width;
+    if (job.height && p.height) params[p.height] = job.height;
+    yield* this.#runSpace({
+      space: this.spaceFor(caps, job.model),
+      endpoint: caps.endpoint || '/infer',
+      params,
+      signal,
+      findOutput: findImageUrl,
+      what: 'image',
+    });
+  }
+
+  #requireToken() {
+    if (!this.isConfigured()) {
+      throw new StudioError('NOT_CONFIGURED', 'HF_TOKEN is not set on the backend. Create a free token at huggingface.co/settings/tokens and add it as an environment variable.');
+    }
+  }
+
+  /** Shared Gradio job runner: connect → fit params → submit → stream status → fetch output inline. */
+  async *#runSpace({ space, endpoint, params, signal, findOutput, what }) {
+    let client;
+    try {
+      client = await Client.connect(space, this.#connectOptions());
+    } catch (err) {
+      throw mapConnectError(err, space);
+    }
+    await this.#fitToEndpoint(client, endpoint, params, space);
 
     let submission;
     try {
-      submission = client.submit(caps.endpoint || '/generate_video', params);
+      submission = client.submit(endpoint, params);
     } catch (err) {
       client.close?.();
       throw mapRunError(err);
@@ -103,22 +144,22 @@ export class HuggingFaceProvider extends VideoProvider {
               started = true;
               yield { type: 'started' };
             }
-            const p = msg.progress_data?.find((d) => d.length);
-            if (p) {
-              yield { type: 'progress', progress: Math.min(1, (p.index ?? 0) / p.length), step: p.index, steps: p.length, desc: p.desc || p.unit || 'steps' };
+            const pd = msg.progress_data?.find((d) => d.length);
+            if (pd) {
+              yield { type: 'progress', progress: Math.min(1, (pd.index ?? 0) / pd.length), step: pd.index, steps: pd.length, desc: pd.desc || pd.unit || 'steps' };
             }
           } else if (msg.stage === 'pending' && msg.position != null) {
             yield { type: 'queued', position: msg.position, size: msg.size ?? null, eta: msg.eta ?? null };
           }
         } else if (msg.type === 'data') {
-          const url = findVideoUrl(msg.data);
-          if (!url) throw new StudioError('PROVIDER_ERROR', 'The Space finished but returned no video file.');
+          const url = findOutput(msg.data);
+          if (!url) throw new StudioError('PROVIDER_ERROR', `The Space finished but returned no ${what} file.`);
           const seed = msg.data.find((v) => typeof v === 'number');
           // Fetch the file NOW, from this same server instance. Busy Spaces run several
           // replicas and route by client, so a later request from a different server
           // (or from the browser) can land on a replica that doesn't have the file (403).
           yield { type: 'saving' };
-          const file = await this.#fetchFile(url, signal);
+          const file = await this.#fetchFile(url, signal, what === 'image' ? 'image/webp' : 'video/mp4');
           if (file) {
             const b64 = toBase64(new Uint8Array(file.bytes));
             const CHUNK = 512 * 1024;
@@ -130,7 +171,7 @@ export class HuggingFaceProvider extends VideoProvider {
           return;
         }
       }
-      throw new StudioError('PROVIDER_ERROR', 'The Space closed the connection before returning a video.');
+      throw new StudioError('PROVIDER_ERROR', `The Space closed the connection before returning the ${what}.`);
     } catch (err) {
       throw err instanceof StudioError ? err : mapRunError(err);
     } finally {
@@ -166,14 +207,37 @@ export class HuggingFaceProvider extends VideoProvider {
     return { user: me.name, plan: me.isPro ? 'PRO' : 'Free', quotaNote: me.isPro ? '≈40 min GPU/day' : '≈5 min GPU/day' };
   }
 
-  async #fetchFile(url, signal) {
+  /**
+   * Spaces differ in their inputs (e.g. community Spaces add "last_image").
+   * Read the Space's own API description, drop inputs it doesn't have, and give
+   * every required input without a default an empty value so the call is valid.
+   */
+  async #fitToEndpoint(client, endpoint, params, space) {
+    let info;
+    try {
+      info = (await client.view_api())?.named_endpoints?.[endpoint];
+    } catch {
+      return; // keep params as-is; the Space will report anything missing
+    }
+    if (!info?.parameters) {
+      throw new StudioError('PROVIDER_UNAVAILABLE', `The Space “${space}” no longer has the ${endpoint} function. It may have changed — pick another model.`);
+    }
+    const names = new Set(info.parameters.map((p) => p.parameter_name));
+    for (const key of Object.keys(params)) if (!names.has(key)) delete params[key];
+    for (const p of info.parameters) {
+      if (p.parameter_name in params || p.parameter_has_default) continue;
+      params[p.parameter_name] = null; // optional media like last_image → none
+    }
+  }
+
+  async #fetchFile(url, signal, fallbackMime = 'video/mp4') {
     for (let i = 0; i < 8; i++) {
       if (signal?.aborted) return null;
       try {
         const res = await fetch(url, { headers: this.fileHeaders(url), cache: 'no-store', signal: AbortSignal.timeout(30_000) });
         if (res.ok) {
           const bytes = await res.arrayBuffer();
-          if (bytes.byteLength > 0) return { bytes, mime: res.headers.get('content-type') || 'video/mp4' };
+          if (bytes.byteLength > 0) return { bytes, mime: res.headers.get('content-type') || fallbackMime };
         } else {
           await res.body?.cancel().catch(() => {});
         }
@@ -221,6 +285,19 @@ function dataUriToBlob(dataUri) {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return new Blob([bytes], { type: m[1] });
+}
+
+function findImageUrl(data) {
+  for (const v of data || []) {
+    if (!v) continue;
+    const items = Array.isArray(v) ? v : [v]; // gr.Gallery returns [{ image: FileData, caption }]
+    for (const it of items) {
+      const f = it?.image || it;
+      if (f && typeof f === 'object' && (f.url || f.path)) return f.url || f.path;
+      if (typeof f === 'string' && /\.(png|jpe?g|webp)(\?|$)/i.test(f)) return f;
+    }
+  }
+  return null;
 }
 
 function findVideoUrl(data) {
