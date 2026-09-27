@@ -302,6 +302,7 @@ const MODELS = {
           "endpoint": "/infer",
           "params": { "image": "images", "imageIsGallery": true, "prompt": "prompt", "seed": "seed", "randomize": "randomize_seed", "fixed": { "true_guidance_scale": 1.0, "num_inference_steps": 4, "rewrite_prompt": false } },
           "gpu": "light",
+          "reserveSeconds": 60,
           "promptMaxChars": 1000
         },
         "flux-kontext": {
@@ -314,6 +315,7 @@ const MODELS = {
           "endpoint": "/infer",
           "params": { "image": "input_image", "prompt": "prompt", "seed": "seed", "randomize": "randomize_seed", "fixed": { "guidance_scale": 2.5, "steps": 28 } },
           "gpu": "heavy",
+          "reserveSeconds": 60,
           "promptMaxChars": 1000
         },
         "flux-schnell": {
@@ -334,6 +336,7 @@ const MODELS = {
             { "aspect": "2:3", "width": 832, "height": 1216 }
           ],
           "gpu": "light",
+          "reserveSeconds": 60,
           "promptMaxChars": 1000
         }
       }

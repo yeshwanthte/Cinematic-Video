@@ -392,6 +392,7 @@
             }
           },
           "gpu": "light",
+          "reserveSeconds": 60,
           "promptMaxChars": 1000
         },
         "flux-kontext": {
@@ -416,6 +417,7 @@
             }
           },
           "gpu": "heavy",
+          "reserveSeconds": 60,
           "promptMaxChars": 1000
         },
         "flux-schnell": {
@@ -471,6 +473,7 @@
             }
           ],
           "gpu": "light",
+          "reserveSeconds": 60,
           "promptMaxChars": 1000
         }
       }

@@ -3,6 +3,7 @@
 import { StudioApi, ERROR_TITLES } from './api-client.js';
 import { settingsStore, imageStore, uid } from './storage.js';
 import { loadImageFile, makeJpegDataUri, fmtBytes, ImageError } from './image-tools.js';
+import { parseQuotaError, explainQuota, quotaLine, lastQuota } from './quota.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -78,7 +79,12 @@ function toast(title, msg = '', kind = '') {
   $('#toasts').append(el);
   setTimeout(() => el.remove(), kind === 'err' ? 9000 : 4500);
 }
-const errInfo = (e) => ({ code: e?.code || 'INTERNAL', title: ERROR_TITLES[e?.code] || ERROR_TITLES.INTERNAL, message: e?.message || String(e) });
+const errInfo = (e) => {
+  const code = e?.code || 'INTERNAL';
+  let message = e?.message || String(e);
+  if (code === 'QUOTA_EXCEEDED') message = `${message}\n\n${explainQuota(parseQuotaError(message))}`.trim();
+  return { code, title: ERROR_TITLES[code] || ERROR_TITLES.INTERNAL, message };
+};
 const models = () => st.catalog?.imageProviders?.huggingface?.models || {};
 const caps = () => models()[st.model];
 
@@ -139,7 +145,12 @@ function renderModels() {
   $('#iModelNote').textContent = c
     ? `${c.description}${st.mode === 'create' && !c.sizes ? ' Output is about 1024 px; aspect ratio is chosen by the model.' : ''}${st.mode === 'edit' ? ' Output keeps roughly the input’s aspect ratio.' : ''}`
     : '';
-  $('#iCost').innerHTML = c ? `<span><b>Free</b> · uses your daily ZeroGPU allowance (${c.gpu === 'heavy' ? 'more GPU per image' : 'light — a few seconds per image'})</span>` : '';
+  const q = lastQuota();
+  const short = c?.reserveSeconds && q?.left != null && q.left < c.reserveSeconds;
+  $('#iCost').innerHTML = c
+    ? `<span><b>Free</b> · needs ${c.reserveSeconds || 60}s of free GPU to start; you're charged only the time actually used${c.gpu === 'heavy' ? ' (this model uses more)' : ''}</span>` +
+      (q ? `<span class="${short ? 'warn' : 'muted'}">${esc(quotaLine())}${short ? ' — not enough to start an image until it resets' : ''}</span>` : '')
+    : '';
 }
 
 function renderRefs() {
@@ -384,6 +395,7 @@ async function generate({ variation = false } = {}) {
       $('#iErrTitle').textContent = info.title;
       $('#iErrMsg').textContent = info.message;
       toast(info.title, info.message, 'err');
+      renderModels();
     }
   }
   updateGenerateBtn();

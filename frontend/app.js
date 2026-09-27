@@ -5,6 +5,7 @@ import { loadImageFile, prepareForGeneration, makeJpegDataUri, cropRect, parseRa
 import { analyzeOnDevice } from './js/analysis.js';
 import { StudioApi, ApiError, ERROR_TITLES } from './js/api-client.js';
 import { settingsStore, projectStore, imageStore, uid } from './js/storage.js';
+import { parseQuotaError, explainQuota, quotaLine } from './js/quota.js';
 
 // ====================================================================== state
 const DEFAULT_SETTINGS = {
@@ -74,10 +75,12 @@ function toast(title, msg = '', kind = '') {
 
 function errInfo(e) {
   const code = e?.code || 'INTERNAL';
+  let message = e?.message || String(e);
+  if (code === 'QUOTA_EXCEEDED') message = `${message}\n\n${explainQuota(parseQuotaError(message))}`.trim();
   return {
     code,
     title: ERROR_TITLES[code] || ERROR_TITLES.INTERNAL,
-    message: e?.message || String(e),
+    message,
     details: { code, httpStatus: e?.status, providerStatus: e?.providerStatus, retryable: e?.retryable, ...(e?.details ? { details: e.details } : {}) },
   };
 }
@@ -393,7 +396,8 @@ function renderCost() {
     est = g
       ? `<b>Free</b> · reserves ≈ <b>${g}s</b> of your ≈${daily || 300}s daily GPU <span title="${esc(quota?.note || '')}">(ZeroGPU)</span>`
       : `<b>Free</b> · <span title="${esc(c.creditsNote || '')}">uses your daily ZeroGPU allowance (longer clips use more)</span>`;
-    line.innerHTML = `<span>${est}</span>`;
+    const ql = quotaLine();
+    line.innerHTML = `<span>${est}</span>${ql ? `<span class="muted">${esc(ql)}</span>` : ''}`;
     return;
   }
   if (c.creditsPerSecond) {
