@@ -1,7 +1,10 @@
 // Optional AI assistant (photo analysis + prompt enhancement).
 //  • ANTHROPIC_API_KEY set            → Anthropic Claude (paid)
-//  • else HF_TOKEN set (free default) → Hugging Face Inference Providers router
-//    (OpenAI-compatible; free accounts get small monthly credits). Disable with HF_ASSISTANT=off.
+//  • else HF_ASSISTANT=on + HF_TOKEN → Hugging Face Inference Providers router (OpenAI-compatible).
+//    OPT-IN ONLY: since 2026 free HF accounts get NO included Inference Providers credits
+//    (huggingface.co/docs/inference-providers/pricing, checked 2026-10-18); PRO includes
+//    US$2/month. Calls beyond included credits are billed to the account, so this is never
+//    switched on implicitly.
 // Without either, the frontend uses its built-in on-device analysis and prompt
 // engine, and clearly labels that it did so. Any assistant failure falls back to it.
 
@@ -14,7 +17,7 @@ const HF_ROUTER = 'https://router.huggingface.co/v1/chat/completions';
 
 export function assistantConfigured(env) {
   if (env.ANTHROPIC_API_KEY) return 'anthropic';
-  if (env.HF_TOKEN && String(env.HF_ASSISTANT || 'on').toLowerCase() !== 'off') return 'huggingface';
+  if (env.HF_TOKEN && String(env.HF_ASSISTANT || 'off').toLowerCase() === 'on') return 'huggingface';
   return '';
 }
 

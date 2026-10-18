@@ -5,4 +5,6 @@ window.STUDIO_CONFIG = {
   //  ''                                  → same origin (Vercel hosting both, or `npm run dev`)
   //  'https://your-project.vercel.app'   → GitHub Pages frontend + Vercel backend
   apiBase: '',
+  // Optional: self-host the ffmpeg.wasm core (folder with ffmpeg-core.js + ffmpeg-core.wasm).
+  // ffmpegCoreBase: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm',
 };

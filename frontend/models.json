@@ -11,19 +11,42 @@
       "quota": {
         "freeSecondsPerDay": 300,
         "proSecondsPerDay": 2400,
-        "note": "ZeroGPU daily allowance per Hugging Face account (free ≈5 min, PRO ≈40 min). Resets 24 h after first use."
+        "anonymousSecondsPerDay": 120,
+        "note": "ZeroGPU daily allowance per Hugging Face account (verified 2026-10-18 at huggingface.co/docs/hub/spaces-zerogpu): free 5 min, PRO 40 min. Resets 24 h after first GPU use. A run only starts if your remaining allowance covers the Space's reserved duration."
       },
       "models": {
         "wan2.2-fast": {
           "label": "Wan 2.2 14B Fast · Free",
-          "quality": "Open-source · 480p · runs on free ZeroGPU",
-          "description": "Alibaba's open Wan 2.2 image-to-video model (14B, Lightning 4-step) on the Hugging Face Space zerogpu-aoti/wan2-2-fp8da-aoti-faster. Free with a Hugging Face account; limited by your daily GPU allowance.",
+          "quality": "Best identity & motion · 480p · up to 5 s",
+          "description": "Alibaba's open Wan 2.2 image-to-video model (14B, Lightning 4-step, Apache-2.0) on the Hugging Face Space zerogpu-aoti/wan2-2-fp8da-aoti-faster. Strongest face/body consistency of the free options. Free with a Hugging Face account; limited by your daily GPU allowance.",
           "space": "zerogpu-aoti/wan2-2-fp8da-aoti-faster",
           "endpoint": "/generate_video",
+          "license": "Apache-2.0",
+          "modes": [
+            "i2v"
+          ],
           "params": {
-            "steps": 4,
-            "baseNegative": "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 最差质量, 低质量, JPEG压缩残留, 畸形的, 多余的手指, 静止不动的画面"
+            "image": "input_image",
+            "prompt": "prompt",
+            "negative": "negative_prompt",
+            "duration": "duration_seconds",
+            "steps": "steps",
+            "seed": "seed",
+            "randomize": "randomize_seed",
+            "baseNegative": "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 最差质量, 低质量, JPEG压缩残留, 畸形的, 多余的手指, 静止不动的画面",
+            "fixed": {
+              "guidance_scale": 1,
+              "guidance_scale_2": 1
+            }
           },
+          "qualityPresets": [
+            {
+              "id": "fast",
+              "label": "Fast",
+              "steps": 4,
+              "note": "4 steps — what the Lightning LoRA is distilled for"
+            }
+          ],
           "durations": {
             "min": 1,
             "max": 5,
@@ -65,15 +88,25 @@
             }
           ],
           "fps": 16,
+          "fpsOptions": [
+            {
+              "value": 16,
+              "label": "16 fps",
+              "note": "native"
+            }
+          ],
+          "lastFrame": false,
           "promptRequired": false,
           "promptMaxChars": 1000,
           "negativePrompt": true,
           "audio": false,
+          "nativeAudio": false,
           "seed": true,
           "inputAspectRange": null,
           "creditsPerSecond": null,
           "free": true,
           "gpuEstimate": {
+            "kind": "wan",
             "base": 10,
             "stepSeconds": 15,
             "steps": 4,
@@ -85,14 +118,58 @@
           "creditsNote": "Free. Each video reserves GPU time from your daily ZeroGPU allowance (formula published in the Space's code)."
         },
         "wan2.2-long": {
-          "label": "Wan 2.2 Extended · Free (community)",
-          "quality": "Open-source · 480p · up to 10 s",
-          "description": "Community Wan 2.2 Space r3gm/wan2-2-fp8da-aoti-preview with longer clips (up to 10 s). Uses much more of your daily GPU allowance; community Spaces can change without notice.",
+          "label": "Wan 2.2 Director · Free (community)",
+          "quality": "480p · up to 10 s · first + last frame · RIFE 32 fps",
+          "description": "Community Wan 2.2 Space r3gm/wan2-2-fp8da-aoti-preview (same Apache-2.0 Wan 2.2 14B model). Adds 10-second clips, an optional END frame (first-last-frame conditioning), more steps, and optional RIFE frame interpolation. Community Spaces can change without notice.",
           "space": "r3gm/wan2-2-fp8da-aoti-preview",
           "endpoint": "/generate_video",
+          "license": "Apache-2.0",
+          "modes": [
+            "i2v"
+          ],
           "params": {
-            "steps": 4
+            "image": "input_image",
+            "lastImage": "last_image",
+            "prompt": "prompt",
+            "negative": "negative_prompt",
+            "duration": "duration_seconds",
+            "steps": "steps",
+            "seed": "seed",
+            "randomize": "randomize_seed",
+            "frameMultiplier": "frame_multiplier",
+            "baseNegative": "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 最差质量, 低质量, JPEG压缩残留, 畸形的, 多余的手指, 静止不动的画面",
+            "fixed": {
+              "guidance_scale": 1,
+              "guidance_scale_2": 1,
+              "quality": 6,
+              "scheduler": "UniPCMultistep",
+              "flow_shift": 3,
+              "video_component": true,
+              "safe_mode": true,
+              "enable_safety_checker": true
+            }
           },
+          "qualityPresets": [
+            {
+              "id": "fast",
+              "label": "Fast",
+              "steps": 4,
+              "note": "4 steps · least GPU"
+            },
+            {
+              "id": "balanced",
+              "label": "Balanced",
+              "steps": 6,
+              "note": "6 steps · the Space's default"
+            },
+            {
+              "id": "max",
+              "label": "Max detail",
+              "steps": 8,
+              "note": "8 steps · ~2× GPU of Fast"
+            }
+          ],
+          "defaultQuality": "balanced",
           "durations": {
             "min": 1,
             "max": 10,
@@ -135,16 +212,144 @@
             }
           ],
           "fps": 16,
+          "fpsOptions": [
+            {
+              "value": 16,
+              "label": "16 fps",
+              "note": "native",
+              "multiplier": 16
+            },
+            {
+              "value": 32,
+              "label": "32 fps",
+              "note": "RIFE-interpolated in the Space (in-between frames are synthesized, not new AI motion)",
+              "multiplier": 32,
+              "interpolated": true
+            }
+          ],
+          "lastFrame": true,
           "promptRequired": false,
           "promptMaxChars": 1000,
           "negativePrompt": true,
           "audio": false,
+          "nativeAudio": false,
           "seed": true,
           "inputAspectRange": null,
           "creditsPerSecond": null,
           "free": true,
-          "gpuEstimate": null,
-          "creditsNote": "Free, but long clips can use most or all of a free account's daily GPU allowance in one run."
+          "gpuEstimate": {
+            "kind": "wan",
+            "base": 15,
+            "stepSeconds": 5,
+            "steps": 6,
+            "baseVolume": 42052608,
+            "fps": 16,
+            "minFrames": 8,
+            "maxFrames": 160,
+            "safeMode": 1.3,
+            "interpPerFrame": 0.02
+          },
+          "creditsNote": "Free. A 10 s clip reserves roughly 1 minute of your daily ZeroGPU allowance (formula published in the Space's code)."
+        },
+        "ltx-2.3": {
+          "label": "LTX-2.3 Distilled · Free",
+          "quality": "Text or image → video · 24 fps · up to 10 s · native audio",
+          "description": "Lightricks' open LTX-2.3 (22B, distilled) on their official Space Lightricks/LTX-2-3. Generates video WITH synchronized AI audio, from text alone or from a photo, at 24 fps. Faster and sharper than Wan, but weaker at keeping faces identical in image-to-video. LTX-2 Community License: free for individuals and companies under US$10M annual revenue; outputs must be disclosed as AI-generated.",
+          "space": "Lightricks/LTX-2-3",
+          "endpoint": "/generate_video",
+          "license": "LTX-2 Community License",
+          "licenseUrl": "https://huggingface.co/Lightricks/LTX-2.3/blob/main/LICENSE",
+          "modes": [
+            "i2v",
+            "t2v"
+          ],
+          "params": {
+            "image": "input_image",
+            "prompt": "prompt",
+            "duration": "duration",
+            "seed": "seed",
+            "randomize": "randomize_seed",
+            "width": "width",
+            "height": "height",
+            "enhance": "enhance_prompt",
+            "fixed": {}
+          },
+          "qualityPresets": [
+            {
+              "id": "fast",
+              "label": "Distilled",
+              "note": "fixed 8-step distilled pipeline"
+            }
+          ],
+          "durations": {
+            "min": 1,
+            "max": 10,
+            "presets": [
+              5,
+              8,
+              10
+            ]
+          },
+          "ratios": [
+            {
+              "value": "768:512",
+              "aspect": "16:9",
+              "resolution": "512p",
+              "note": "3:2 frame"
+            },
+            {
+              "value": "512:768",
+              "aspect": "9:16",
+              "resolution": "512p",
+              "note": "2:3 frame"
+            },
+            {
+              "value": "768:768",
+              "aspect": "1:1",
+              "resolution": "512p"
+            },
+            {
+              "value": "1536:1024",
+              "aspect": "16:9",
+              "resolution": "1024p",
+              "note": "3:2 frame"
+            },
+            {
+              "value": "1024:1536",
+              "aspect": "9:16",
+              "resolution": "1024p",
+              "note": "2:3 frame"
+            },
+            {
+              "value": "1024:1024",
+              "aspect": "1:1",
+              "resolution": "1024p"
+            }
+          ],
+          "fps": 24,
+          "fpsOptions": [
+            {
+              "value": 24,
+              "label": "24 fps",
+              "note": "native"
+            }
+          ],
+          "lastFrame": false,
+          "promptRequired": true,
+          "promptMaxChars": 1000,
+          "negativePrompt": false,
+          "audio": false,
+          "nativeAudio": true,
+          "spaceEnhance": true,
+          "seed": true,
+          "inputAspectRange": null,
+          "creditsPerSecond": null,
+          "free": true,
+          "gpuEstimate": {
+            "kind": "fixed",
+            "seconds": 75
+          },
+          "creditsNote": "Free. Each run reserves 75 s of your daily ZeroGPU allowance (fixed in the Space's code); only the GPU time actually used is deducted."
         }
       }
     },
@@ -369,32 +574,6 @@
       "label": "Hugging Face (free)",
       "free": true,
       "models": {
-        "qwen-edit-fast": {
-          "label": "Qwen Image Edit 2511 · Free",
-          "quality": "Best at keeping faces & identity · 4-step fast",
-          "description": "Alibaba's open Qwen-Image-Edit-2511 (Lightning 4-step) on the Space linoyts/Qwen-Image-Edit-2511-Fast. Strong subject and face consistency; accepts up to 3 reference images.",
-          "modes": [
-            "edit"
-          ],
-          "maxImages": 3,
-          "space": "linoyts/Qwen-Image-Edit-2511-Fast",
-          "endpoint": "/infer",
-          "params": {
-            "image": "images",
-            "imageIsGallery": true,
-            "prompt": "prompt",
-            "seed": "seed",
-            "randomize": "randomize_seed",
-            "fixed": {
-              "true_guidance_scale": 1,
-              "num_inference_steps": 4,
-              "rewrite_prompt": false
-            }
-          },
-          "gpu": "light",
-          "reserveSeconds": 60,
-          "promptMaxChars": 1000
-        },
         "flux-kontext": {
           "label": "FLUX.1 Kontext [dev] · Free",
           "quality": "High-quality edits & text-to-image · slower",
@@ -417,6 +596,57 @@
             }
           },
           "gpu": "heavy",
+          "reserveSeconds": 60,
+          "promptMaxChars": 1000
+        },
+        "qwen-edit": {
+          "label": "Qwen Image Edit · Free",
+          "quality": "Strong identity preservation · 8-step fast",
+          "description": "Alibaba's open Qwen-Image-Edit with the Lightning 8-step LoRA on the Space multimodalart/Qwen-Image-Edit-Fast. Very good at keeping the same person while changing background, clothes or lighting.",
+          "modes": [
+            "edit"
+          ],
+          "maxImages": 1,
+          "space": "multimodalart/Qwen-Image-Edit-Fast",
+          "endpoint": "/infer",
+          "params": {
+            "image": "image",
+            "prompt": "prompt",
+            "seed": "seed",
+            "randomize": "randomize_seed",
+            "fixed": {
+              "true_guidance_scale": 1,
+              "num_inference_steps": 8,
+              "rewrite_prompt": false
+            }
+          },
+          "gpu": "light",
+          "reserveSeconds": 60,
+          "promptMaxChars": 1000
+        },
+        "qwen-edit-fast": {
+          "label": "Qwen Image Edit 2511 · Free (experimental)",
+          "quality": "Newest Qwen · multi-photo · Space sometimes crashes",
+          "description": "Alibaba's open Qwen-Image-Edit-2511 (Lightning 4-step) on the Space linoyts/Qwen-Image-Edit-2511-Fast. Strong subject and face consistency; accepts up to 3 reference images.",
+          "modes": [
+            "edit"
+          ],
+          "maxImages": 3,
+          "space": "linoyts/Qwen-Image-Edit-2511-Fast",
+          "endpoint": "/infer",
+          "params": {
+            "image": "images",
+            "imageIsGallery": true,
+            "prompt": "prompt",
+            "seed": "seed",
+            "randomize": "randomize_seed",
+            "fixed": {
+              "true_guidance_scale": 1,
+              "num_inference_steps": 4,
+              "rewrite_prompt": false
+            }
+          },
+          "gpu": "light",
           "reserveSeconds": 60,
           "promptMaxChars": 1000
         },

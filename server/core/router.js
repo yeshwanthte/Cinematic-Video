@@ -6,6 +6,7 @@ import { StudioError, toStudioError } from './errors.js';
 import { validateJob, getCapabilities, validateImageJob } from './validate.js';
 import { getProvider, listProviderIds } from '../providers/index.js';
 import { assistantConfigured, analyzeImage, enhancePrompt } from './assistant.js';
+import { acquireJobSlot } from './ratelimit.js';
 
 const MAX_BODY_BYTES = 4_400_000; // stays under Vercel's 4.5 MB request limit
 
@@ -29,7 +30,7 @@ function corsHeaders(request, env) {
   const h = {
     Vary: 'Origin',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Studio-Access',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Studio-Access, X-Request-Id',
     'Access-Control-Max-Age': '600',
   };
   if (origin) h['Access-Control-Allow-Origin'] = origin;
@@ -81,7 +82,7 @@ function taskIdFrom(value) {
 
 // Streams provider events as NDJSON (one JSON object per line). Closing the
 // connection (browser cancel / tab closed) aborts the upstream job.
-function streamGeneration(request, env, provider, providerId, caps, job, method = 'generateStream') {
+function streamGeneration(request, env, provider, providerId, caps, job, method = 'generateStream', onDone = () => {}) {
   const enc = new TextEncoder();
   const abort = new AbortController();
   request.signal?.addEventListener?.('abort', () => abort.abort(), { once: true });
@@ -105,6 +106,7 @@ function streamGeneration(request, env, provider, providerId, caps, job, method 
         if (!abort.signal.aborted) send({ type: 'error', ...e.toJSON() });
       } finally {
         clearInterval(heartbeat);
+        onDone();
         try {
           controller.close();
         } catch {
@@ -115,6 +117,7 @@ function streamGeneration(request, env, provider, providerId, caps, job, method 
     cancel() {
       clearInterval(heartbeat);
       abort.abort();
+      onDone();
     },
   });
   return new Response(body, {
@@ -171,8 +174,14 @@ const routes = {
     const body = await readJson(request);
     const { providerId, caps, job } = validateJob(body);
     const provider = getProvider(providerId, env);
-    if (provider.mode === 'stream') return streamGeneration(request, env, provider, providerId, caps, job);
-    const { taskId, estimatedCredits } = await provider.generate(job, caps);
+    const release = acquireJobSlot(request, env);
+    if (provider.mode === 'stream') return streamGeneration(request, env, provider, providerId, caps, job, 'generateStream', release);
+    let taskId, estimatedCredits;
+    try {
+      ({ taskId, estimatedCredits } = await provider.generate(job, caps));
+    } finally {
+      release(); // polled providers run remotely; the slot only guards the submit
+    }
     return json(request, env, 202, {
       taskId,
       provider: providerId,
@@ -191,7 +200,8 @@ const routes = {
     const { providerId, caps, job } = validateImageJob(body);
     const provider = getProvider(providerId, env);
     if (typeof provider.generateImageStream !== 'function') throw new StudioError('NOT_IMPLEMENTED', `${providerId} does not support image generation.`);
-    return streamGeneration(request, env, provider, providerId, caps, job, 'generateImageStream');
+    const release = acquireJobSlot(request, env);
+    return streamGeneration(request, env, provider, providerId, caps, job, 'generateImageStream', release);
   },
 
   async status(request, env) {
@@ -290,9 +300,10 @@ const routes = {
     return json(request, env, 200, await enhancePrompt(env, { text: String(body.text || '').slice(0, 2000), context: body.context, maxChars, kind: body.kind }));
   },
 
-  // Story Mode final render (clip stitching) is intentionally NOT implemented yet.
+  // Clip assembly runs in the browser (ffmpeg.wasm), never in a serverless function:
+  // multi-megabyte videos would exceed the 4.5 MB request limit and burn function time.
   async render(request, env) {
-    throw new StudioError('NOT_IMPLEMENTED', 'Story rendering (stitching scenes into one video) is not implemented yet. Download each scene clip individually.');
+    throw new StudioError('NOT_IMPLEMENTED', 'Final videos are assembled in your browser (Film Studio → Export). The server does not render video.');
   },
 };
 

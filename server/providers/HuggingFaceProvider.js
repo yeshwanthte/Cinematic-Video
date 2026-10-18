@@ -51,19 +51,10 @@ export class HuggingFaceProvider extends VideoProvider {
    */
   async *generateStream(job, caps, { signal } = {}) {
     this.#requireToken();
-    const params = {
-      [caps.params?.image || 'input_image']: dataUriToBlob(job.image),
-      prompt: job.prompt,
-      steps: caps.params?.steps ?? 4,
-      negative_prompt: [caps.params?.baseNegative, job.negativePrompt].filter(Boolean).join(', '),
-      duration_seconds: job.duration,
-      seed: Number.isInteger(job.seed) ? job.seed : 42,
-      randomize_seed: !Number.isInteger(job.seed),
-    };
     yield* this.#runSpace({
       space: this.spaceFor(caps, job.model),
       endpoint: caps.endpoint || '/generate_video',
-      params,
+      params: buildVideoParams(job, caps),
       signal,
       findOutput: findVideoUrl,
       what: 'video',
@@ -104,14 +95,31 @@ export class HuggingFaceProvider extends VideoProvider {
   }
 
   /** Shared Gradio job runner: connect → fit params → submit → stream status → fetch output inline. */
-  async *#runSpace({ space, endpoint, params, signal, findOutput, what }) {
+  // Bare crashes like "RuntimeError" are usually transient on busy ZeroGPU Spaces
+  // (worker restarted, GPU slot lost, cold start). Retry once automatically.
+  async *#runSpace(opts) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        for await (const ev of this.#runSpaceOnce(opts)) {
+          if (attempt > 1 && ev.type === 'accepted') yield { type: 'retrying', attempt };
+          yield ev;
+        }
+        return;
+      } catch (err) {
+        if (attempt < 2 && err?.transient && !opts.signal?.aborted) continue;
+        throw err;
+      }
+    }
+  }
+
+  async *#runSpaceOnce({ space, endpoint, params, signal, findOutput, what }) {
     let client;
     try {
       client = await Client.connect(space, this.#connectOptions());
     } catch (err) {
       throw mapConnectError(err, space);
     }
-    await this.#fitToEndpoint(client, endpoint, params, space);
+    endpoint = await this.#fitToEndpoint(client, endpoint, params, space);
 
     let submission;
     try {
@@ -138,7 +146,12 @@ export class HuggingFaceProvider extends VideoProvider {
       for await (const msg of submission) {
         if (signal?.aborted) throw new StudioError('INVALID_REQUEST', 'Generation cancelled.');
         if (msg.type === 'status') {
-          if (msg.stage === 'error') throw mapRunError(new Error(msg.message || 'The Space reported an error.'));
+          if (msg.stage === 'error') {
+            // Full status goes to the server log (Vercel → Logs) to help diagnose Space-side crashes.
+            console.error('[studio] Space error', space, endpoint, JSON.stringify({ title: msg.title, message: msg.message, code: msg.code }));
+            const detail = [msg.title && msg.title !== 'Error' && msg.title !== msg.message ? msg.title : '', msg.message].filter(Boolean).join(': ');
+            throw mapRunError(new Error(detail || 'The Space reported an error.'));
+          }
           if (msg.original_msg === 'process_starts' || msg.progress_data) {
             if (!started) {
               started = true;
@@ -214,10 +227,21 @@ export class HuggingFaceProvider extends VideoProvider {
    */
   async #fitToEndpoint(client, endpoint, params, space) {
     let info;
+    let named;
     try {
-      info = (await client.view_api())?.named_endpoints?.[endpoint];
+      named = (await client.view_api())?.named_endpoints || {};
+      info = named[endpoint];
     } catch {
-      return; // keep params as-is; the Space will report anything missing
+      return endpoint; // keep params as-is; the Space will report anything missing
+    }
+    if (!info?.parameters) {
+      // Gradio de-duplicates function names (/generate_video_1 …) when a Space wires the same
+      // function to several buttons. Accept such a variant if it takes the same main inputs.
+      const alt = Object.keys(named).find((k) => k.startsWith(endpoint + '_') && named[k]?.parameters?.some((p) => p.parameter_name in params));
+      if (alt) {
+        info = named[alt];
+        endpoint = alt;
+      }
     }
     if (!info?.parameters) {
       throw new StudioError('PROVIDER_UNAVAILABLE', `The Space “${space}” no longer has the ${endpoint} function. It may have changed — pick another model.`);
@@ -228,6 +252,7 @@ export class HuggingFaceProvider extends VideoProvider {
       if (p.parameter_name in params || p.parameter_has_default) continue;
       params[p.parameter_name] = null; // optional media like last_image → none
     }
+    return endpoint;
   }
 
   async #fetchFile(url, signal, fallbackMime = 'video/mp4') {
@@ -329,5 +354,43 @@ function mapRunError(err) {
   if (/no gpu|gpu.*(unavailable|not available)|timed? ?out/i.test(msg)) return new StudioError('PROVIDER_UNAVAILABLE', `Hugging Face: ${msg}`);
   if (/nsfw|safety|unsafe/i.test(msg)) return new StudioError('CONTENT_MODERATION', `Hugging Face: ${msg}`);
   if (/connection|network|ECONN|fetch failed/i.test(msg)) return new StudioError('NETWORK', `Lost connection to the Hugging Face Space: ${msg}`);
+  if (/^\s*(\w*Error|Exception)?\s*$/.test(msg)) {
+    const e = new StudioError(
+      'GENERATION_FAILED',
+      `The Hugging Face Space crashed while generating (it only reported “${msg.trim() || 'an error'}”, with no details). This is on the Space's side — usually a busy or restarting GPU worker — not a problem with your photo or settings. The studio already retried once automatically. Try again in a minute, or pick another model.`
+    );
+    e.transient = true;
+    return e;
+  }
   return new StudioError('GENERATION_FAILED', `Hugging Face Space error: ${msg}`);
 }
+
+/**
+ * Maps a validated job onto the exact parameter names of a Space's generate function.
+ * Every name comes from server/models.js (copied from the Space's own app.py), so
+ * adding a model is a config change. Unknown names are dropped later by #fitToEndpoint.
+ */
+export function buildVideoParams(job, caps) {
+  const p = caps.params || {};
+  const params = { ...(p.fixed || {}) };
+  params[p.image || 'input_image'] = job.image ? dataUriToBlob(job.image) : null;
+  if (p.lastImage) params[p.lastImage] = job.lastImage ? dataUriToBlob(job.lastImage) : null;
+  params[p.prompt || 'prompt'] = job.prompt;
+  if (p.negative) {
+    const neg = [p.baseNegative, job.negativePrompt].filter(Boolean).join(', ');
+    params[p.negative] = neg;
+  }
+  params[p.duration || 'duration_seconds'] = job.duration;
+  if (p.steps) params[p.steps] = job.steps ?? 4;
+  if (p.seed) params[p.seed] = Number.isInteger(job.seed) ? job.seed : 42;
+  if (p.randomize) params[p.randomize] = !Number.isInteger(job.seed);
+  if (p.width || p.height) {
+    const [w, h] = String(job.ratio).split(':').map(Number);
+    if (p.width) params[p.width] = w;
+    if (p.height) params[p.height] = h;
+  }
+  if (p.frameMultiplier && job.frameMultiplier) params[p.frameMultiplier] = job.frameMultiplier;
+  if (p.enhance) params[p.enhance] = Boolean(job.enhance);
+  return params;
+}
+
