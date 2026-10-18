@@ -4,8 +4,9 @@
 
 export const INTENSITY = {
   subtle: { label: 'Subtle', speed: 'very slow, gentle', amount: 'minimal, restrained' },
-  balanced: { label: 'Balanced', speed: 'slow, smooth', amount: 'natural, moderate' },
+  balanced: { label: 'Natural', speed: 'slow, smooth', amount: 'natural, moderate' },
   dynamic: { label: 'Dynamic', speed: 'steady, purposeful', amount: 'clearly visible, energetic yet controlled' },
+  cinematic: { label: 'Cinematic', speed: 'deliberate, sweeping', amount: 'bold, motivated and fluid, like a feature-film camera move' },
 };
 
 export const CAMERA = [
@@ -31,6 +32,8 @@ export const SUBJECT = [
   { id: 'blink', label: 'Natural blinking', phrase: 'the subject blinks naturally', needs: ['face'] },
   { id: 'head', label: 'Slight head movement', phrase: 'the subject makes a slight, natural head movement', needs: ['face'] },
   { id: 'walking', label: 'Walking', phrase: 'the subject walks forward with a natural, unhurried gait', needs: ['person'] },
+  { id: 'running', label: 'Running', phrase: 'the subject runs forward with a natural, athletic stride', needs: ['person'] },
+  { id: 'dancing', label: 'Dancing', phrase: 'the subject dances with fluid, rhythmic and natural body movement', needs: ['person'] },
   { id: 'turning', label: 'Turning', phrase: 'the subject turns slowly and naturally', needs: ['person'] },
   { id: 'looking', label: 'Looking around', phrase: 'the subject gently looks around, eyes shifting naturally', needs: ['face'] },
   { id: 'smile', label: 'Smiling naturally', phrase: 'a soft, natural smile gradually forms', needs: ['face'] },
@@ -51,6 +54,7 @@ export const ENVIRONMENT = [
 ];
 
 export const STYLES = [
+  { id: 'photoreal', label: 'Photorealistic', blurb: 'True-to-life, no stylisation.', phrase: 'Photorealistic, true-to-life detail and natural light; no stylisation.', camera: 'push_in', intensity: 'balanced', env: ['ambient'] },
   { id: 'cinematic', label: 'Cinematic Film', blurb: 'Natural movement, filmic camera, realistic depth.', phrase: 'Filmic look with realistic depth and natural cinematic pacing.', camera: 'push_in', intensity: 'balanced', env: ['ambient'] },
   { id: 'luxury', label: 'Luxury', blurb: 'Elegant slow camera, premium lighting.', phrase: 'Elegant, unhurried motion with refined, premium lighting transitions.', camera: 'dolly', intensity: 'subtle', env: ['sunlight'] },
   { id: 'travel', label: 'Travel Film', blurb: 'Lively environment, cinematic camera.', phrase: 'Travel-film energy with lively, natural environmental motion.', camera: 'crane_up', intensity: 'dynamic', env: ['wind', 'clouds'] },
@@ -61,6 +65,8 @@ export const STYLES = [
   { id: 'documentary', label: 'Documentary', blurb: 'Natural handheld, observational.', phrase: 'Natural, observational documentary feel.', camera: 'handheld', intensity: 'balanced', env: ['ambient'] },
   { id: 'dramatic', label: 'Dramatic', blurb: 'Stronger camera, atmospheric motion.', phrase: 'Bold, atmospheric motion with a moody, dramatic feel.', camera: 'crane_up', intensity: 'dynamic', env: ['fog', 'clouds'] },
   { id: 'dreamy', label: 'Dreamy', blurb: 'Soft, floating, atmospheric depth.', phrase: 'Soft, floating movement with atmospheric depth and a gentle ethereal feel.', camera: 'pull_out', intensity: 'subtle', env: ['dust', 'sunlight'] },
+  { id: 'animation', label: 'Animation', blurb: 'Animated-film look, expressive motion.', phrase: 'Polished animated-film look with clean shapes and expressive, fluid motion.', camera: 'orbit', intensity: 'dynamic', env: ['wind'] },
+  { id: 'artistic', label: 'Artistic', blurb: 'Painterly, stylised, poetic.', phrase: 'Artistic, painterly rendering with poetic, stylised movement.', camera: 'parallax', intensity: 'subtle', env: ['dust', 'sunlight'] },
 ];
 
 // Positive phrasing for models without a negative-prompt input (Runway Gen-4.x);

@@ -62,7 +62,7 @@ const st = {
   refs: [], // { id, name, bitmap, url, dataUri, width, height, size }
   locks: new Set(LOCKS.filter((l) => l.on).map((l) => l.id)),
   style: 'photo',
-  model: 'qwen-edit-fast',
+  model: 'flux-kontext',
   aspect: '1:1',
   catalog: null,
   health: null,
@@ -352,7 +352,8 @@ async function generate({ variation = false } = {}) {
           $('#iProgWrap').hidden = false;
           $('#iBar').style.width = `${Math.round(ev.progress * 100)}%`;
           $('#iPct').textContent = `${Math.round(ev.progress * 100)}%`;
-        } else if (ev.type === 'saving') stepSet('final', 'active', 'Receiving the image from the Space');
+        } else if (ev.type === 'retrying') stepSet('send', 'active', 'The Space crashed — retrying once automatically…');
+        else if (ev.type === 'saving') stepSet('final', 'active', 'Receiving the image from the Space');
       },
     });
     let blob = r.blob;
@@ -394,6 +395,14 @@ async function generate({ variation = false } = {}) {
       $('#iGenActions').hidden = true;
       $('#iErrTitle').textContent = info.title;
       $('#iErrMsg').textContent = info.message;
+      // Offer the other model for the same mode (they run on separate Spaces)
+      const alt = Object.entries(models()).find(([id, m]) => id !== st.model && m.modes.includes(st.mode) && (st.mode === 'create' || m.maxImages >= 1));
+      const sw = $('#iSwitch');
+      sw.hidden = !alt || !['GENERATION_FAILED', 'PROVIDER_UNAVAILABLE', 'PROVIDER_ERROR'].includes(info.code);
+      if (alt) {
+        sw.textContent = `Try with ${alt[1].label.replace(' · Free', '')}`;
+        sw.dataset.model = alt[0];
+      }
       toast(info.title, info.message, 'err');
       renderModels();
     }
@@ -514,6 +523,11 @@ function bind() {
   $('#iGenerate').addEventListener('click', () => generate());
   $('#iRetry').addEventListener('click', () => generate());
   $('#iBack').addEventListener('click', () => renderStage());
+  $('#iSwitch').addEventListener('click', (e) => {
+    st.model = e.currentTarget.dataset.model;
+    renderModels();
+    generate();
+  });
   $('#iCancel').addEventListener('click', () => st.job?.abort.abort());
   $('#iDownload').addEventListener('click', downloadPng);
   $('#iVariation').addEventListener('click', () => {

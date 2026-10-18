@@ -4,11 +4,13 @@
 
 | | Free (default) | Paid (optional) |
 |---|---|---|
-| Video model | **Wan 2.2 14B Fast** (open-source) on a Hugging Face ZeroGPU Space | Runway Gen-4.5, Gen-4 Turbo, Veo 3.1 / 3.1 Fast |
+| Video models | **Wan 2.2 14B Fast** (≤5 s) · **Wan 2.2 Director** (≤10 s, first + last frame, RIFE 32 fps) · **LTX-2.3 Distilled** (≤10 s, text **or** photo → video, 24 fps, native AI audio) — all on Hugging Face ZeroGPU Spaces | Runway Gen-4.5, Gen-4 Turbo, Veo 3.1 / 3.1 Fast |
+| Longer videos | **Film Studio**: 10–30 s films assembled from real AI shots; each shot can start from the previous shot's real last frame | same workflow |
 | What you need | A free Hugging Face account and token | A Runway API key and credits |
-| Limits | ≈5 min of GPU per day on a free account (≈5 clips of 5 s, or ≈10 of 3 s). Resets 24 h after first use | Pay per second |
-| Output | 480p, 16 fps, 1–5 s (a community model goes up to 10 s) | 720p–1080p, up to 10 s |
-| AI photo analysis + Enhance Prompt | Hugging Face's free monthly credits. The built-in engine takes over when they run out | Claude (optional) |
+| Limits | 5 min of ZeroGPU per day on a free account, 40 min on PRO (HF docs, checked Oct 2026). A 10 s Wan clip reserves ≈1–1.5 min, an LTX clip 75 s | Pay per second |
+| Output | Wan: 480p, 16 fps (32 fps with RIFE). LTX: up to 1536×1024, 24 fps, with audio | 720p–1080p, up to 10 s |
+| Prompt enhancer + photo analysis | Built into the browser, free. The hosted AI assistant is **opt-in** (`HF_ASSISTANT=on`) because free HF accounts no longer include Inference Provider credits | Claude (optional) |
+| Assembly / export | ffmpeg.wasm in the browser: crossfades, music, fades, resize, fps, H.264/AAC MP4 | same |
 | Hosting | Vercel Hobby (free) and/or GitHub Pages (free) | same |
 
 Nothing is simulated. The studio only says "Video generated" once the model has actually returned a video and your browser has loaded it. Progress is the real step counter streamed from the Space (for example "Denoising step 3 of 4"), or Runway's own `progress` value. Errors show the provider's real message.
@@ -32,6 +34,10 @@ Browser ──► your backend (Vercel) ──► Hugging Face Space (Wan 2.2) �
 
 ```
 frontend/             static site (index.html, styles.css, app.js, js/*)  → Vercel or GitHub Pages
+frontend/js/film-studio.js     Film Studio (shot plan, timeline, chained shots, export)
+frontend/js/shot-planner.js    deterministic shot planner + continuity prompts (no paid LLM)
+frontend/js/assembler*.js      ffmpeg.wasm assembly (graph builder is pure + unit-tested)
+frontend/vendor/ffmpeg/        @ffmpeg/ffmpeg 0.12.15 + @ffmpeg/util 0.12.2 (MIT); the GPL core loads from jsDelivr
 api/*.js              Vercel Functions (thin wrappers)
 server/models.js      the only place model capabilities, limits and pricing are defined
 server/core/          router (streams + JSON), validation, errors, AI assistant
@@ -100,32 +106,46 @@ Edit a photo from a written instruction, or create a new image from text. It run
 
 **What to expect:** these open models are among the best available for keeping identity, and the locks tell them exactly what must not change. Still, **no model can guarantee a perfect match every time.** Always check with the before/after slider. If a face drifts, click **New variation** (it uses a new seed) or make the instruction more specific.
 
+## Film Studio (10–30 s, free)
+
+1. **Film** in the top bar → add the photo the film starts from (or choose **Text only**).
+2. Type the idea, pick a preset (travel, portrait, product, nature, architecture, lifestyle, storytelling), a length (single shot, 10, 15, 20, 30 s), motion and model.
+3. **Plan shots** builds an editable plan. Every shot is a native clip the model really supports (e.g. 20 s on Wan Director = 2 × 10 s). The continuity bible (subject, wardrobe, setting, lighting, look) is added to every prompt.
+4. **Approve plan & generate shots.** Shot 1 starts from your photo; each "continue" shot starts from the **real last frame** of the shot before it, so the film reads as one take. Regenerate any single shot; shots that continued from it are flagged so you can refresh them.
+5. **Export MP4**: crossfade / dip to black / cut, optional music (volume, fades), keep LTX's AI audio, resize to 720p/1080p, change fps (optionally with motion interpolation). The export summary states exactly what is AI-generated and what is post-processing.
+
+What it is not: a single 30 s AI generation. No free model generates 30 s natively. The timeline always shows native clip length vs assembled length.
+
 ## 4. Optional extras
 
 - **GitHub Pages frontend:** in `frontend/config.js`, set `apiBase: 'https://<project>.vercel.app'`. In the repo go to Settings → Pages → Source: **GitHub Actions** (the workflow is included). In Vercel, add `ALLOWED_ORIGINS=https://<user>.github.io` and redeploy.
 - **Run locally:** install Node 20+, run `cp .env.example .env`, add `HF_TOKEN`, then `npm install` and `npm run dev`, and open http://localhost:8787.
-- **More free GPU:** a Hugging Face PRO plan (paid) gives ≈40 min/day. You can also run your own copy of the Space and point to it with `HF_SPACE_OVERRIDES={"wan2.2-fast":"you/your-space"}`.
-- **Turn off the AI assistant** (to keep your free monthly credits): `HF_ASSISTANT=off`.
+- **More free GPU:** a Hugging Face PRO plan (paid) gives 40 min/day. You can also run your own copy of a Space and point to it with `HF_SPACE_OVERRIDES={"wan2.2-fast":"you/your-space"}`.
+- **Hosted AI assistant (opt-in, may cost money):** `HF_ASSISTANT=on` sends photo analysis / prompt enhancement to Hugging Face Inference Providers. Free accounts have no included credits; PRO includes US$2/month; usage beyond that is billed to your HF account.
+- **Self-host the ffmpeg core:** set `ffmpegCoreBase` in `frontend/config.js` to a folder containing `ffmpeg-core.js` and `ffmpeg-core.wasm` from `@ffmpeg/core@0.12.10`.
 - **Premium paid models:** add `RUNWAY_API_KEY`. Runway Gen-4.5, Gen-4 Turbo and Veo 3.1 then appear under "Paid" in the model list.
 
 ## 5. Security
 
 - `HF_TOKEN`, `RUNWAY_API_KEY` and `ANTHROPIC_API_KEY` exist only as server environment variables. They're never in the frontend, localStorage, git, or any browser request. `/api/health` only reports `configured: true/false`.
 - `STUDIO_ACCESS_CODE` protects your free quota and any paid credits.
+- Every generation carries a unique `X-Request-Id`; the same id is refused (409), so a double click or network retry can never spend GPU twice. Per-IP limits: `MAX_CONCURRENT_JOBS` (default 3) and `RATE_LIMIT_PER_HOUR` (default 30). These live in memory, so on Vercel they are per warm instance — a guard against accidents and loops; the access code is the real gate.
 - The download proxy only fetches files hosted on `*.hf.space` (or on Runway's own task record), so it can't be used for SSRF.
-- Uploads are checked by type, magic bytes and size.
+- Uploads are checked by type, magic bytes and size. Videos, music and exported films stay in the browser (IndexedDB); nothing large passes through a Vercel function except the streamed clip itself.
 
 ## 6. Honest limits
 
 | Feature | Status |
 |---|---|
-| Free generation, live Space progress, cancel, variations, Story Mode scenes, projects, download | ✅ |
-| Free output: 480p, 16 fps, ≤5 s (≤10 s on the community model). 720p/1080p and 15 s are not possible for free | as stated |
-| Free daily limit: when it runs out you see *"Your free daily GPU allowance is used up"* with the time until it resets | ✅ |
+| Free generation, live Space progress, cancel, variations, Story Mode, Film Studio, projects, download | ✅ |
+| Native clip length: Wan Fast ≤5 s, Wan Director ≤10 s, LTX-2.3 ≤10 s. 10–30 s films are **assembled** from shots | as stated |
+| Identity: Wan 2.2 keeps faces best; LTX-2.3 is sharper/faster but can drift on faces in photo→video. No model guarantees identity | known |
+| Free daily limit (5 min GPU): a 30 s film can need most of it. The plan shows the GPU estimate before you start | ✅ |
 | Public Spaces can be busy, restarting or renamed. You get a clear "Space unavailable" error, and the Space can be switched with `HF_SPACE_OVERRIDES` | known risk |
 | Reloading the page during a free generation stops it (the connection closes). The studio marks it *interrupted* | by design |
-| Stitching Story Mode clips into one video | ❌ not implemented (`/api/render` returns 501) |
-| Audio | ❌ free models are silent. Native audio only on paid Veo 3.1 |
+| Resize to 720p/1080p and fps changes are post-processing; they add no AI detail. Motion interpolation synthesizes frames | labelled in the export |
+| Audio | LTX-2.3 native AI audio (free) · your uploaded music · Wan is silent · no AI voiceover/SFX |
+| LTX-2.3 license | LTX-2 Community License: free under US$10M annual revenue; outputs must be disclosed as AI-generated. Wan 2.2 is Apache-2.0 |
 
 ## 7. Adding providers
 
@@ -133,6 +153,6 @@ Extend `VideoProvider` (`server/providers/`). A polled provider implements `gene
 
 ## 8. Testing performed
 
-- `npm test`: 10 unit tests covering validation for both providers, the free provider being the default, the SSRF guard, CORS, the access code, that secrets never leak, the Runway request contract, and the error mapping.
-- `npm run test:e2e`: 50 browser checks. The free path runs against a **real Gradio 6.1 app with the Wan Space's exact API signature** (upload, queue, streamed step progress, quota error, crash, cancel). The paid path runs against a Runway contract double. Also covered: projects persisting across reloads, mobile/tablet layouts, and GitHub Pages hosting.
-- **Not done here:** a call to the live public Space, because the build environment can't reach huggingface.co. The integration uses the official `@gradio/client` and the Space's published code. Your first generation (step 14) is that final check.
+- `npm test`: 18 unit tests — validation for every model (text-to-video, end frame, fps, quality), the exact parameter names sent to each Space, duplicate-request and rate limits, the assistant being opt-in, the shot planner, and the FFmpeg graph (crossfade offsets, dropped duplicate frame, audio mix), plus the original security tests.
+- `npm run test:e2e`: three browser suites against **real Gradio apps with each Space's exact API signature** (Wan Fast, Wan Director, LTX-2.3, image Spaces) and a Runway contract double. The film suite plans, generates and chains shots, exports with real ffmpeg.wasm and checks the MP4 with ffprobe (H.264 + AAC, size, fps, duration).
+- **Not done here:** calls to the live public Spaces, because the build environment can't reach huggingface.co. Your first generation after deploying is that final check.

@@ -44,7 +44,7 @@ const joinList = (arr) => (arr.length <= 1 ? arr.join('') : `${arr.slice(0, -1).
 const sentence = (s) => (s ? cap(s.trim().replace(/[.\s]+$/, '')) + '.' : '');
 
 function timingSentence(duration, intensity) {
-  const pace = intensity === 'dynamic' ? 'builds confidently' : intensity === 'balanced' ? 'holds a steady pace' : 'stays unhurried';
+  const pace = intensity === 'cinematic' ? 'unfolds as one deliberate, sweeping feature-film move' : intensity === 'dynamic' ? 'builds confidently' : intensity === 'balanced' ? 'holds a steady pace' : 'stays unhurried';
   return `Motion eases in, ${pace} and eases out smoothly across the full ${duration} seconds.`;
 }
 
@@ -138,6 +138,8 @@ const INTENTS = {
     ['hair', /\bhair\b/i],
     ['clothing', /\b(dress|cloth|fabric|saree|sari|veil|scarf|gown|shirt)/i],
     ['walking', /\bwalk/i],
+    ['running', /\b(run|running|jog)/i],
+    ['dancing', /\bdanc/i],
     ['turning', /\bturn(?:s|ing)?\b(?! (?:on|off))/i],
     ['looking', /\blook(?:s|ing)? around|glanc/i],
     ['head', /\bhead\b/i],
@@ -167,6 +169,7 @@ const INTENTS = {
   ],
   intensity: [
     ['subtle', /\b(subtle|gentle|gently|slight(?:ly)?|calm|soft(?:ly)?|slow(?:ly)?)\b/i],
+    ['cinematic', /\b(sweeping|epic camera|feature[- ]film|blockbuster)\b/i],
     ['dynamic', /\b(dynamic|fast|energetic|bold|strong|quick)\b/i],
   ],
 };

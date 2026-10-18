@@ -113,7 +113,7 @@ try {
   check('Free Wan model: 3/5 s, 480p, includes 4:5', durs.join() === '3 sec,5 sec' && ratios.some((r) => r.startsWith('4:5')) && (await page.locator('#resolutionSeg').innerText()).includes('480p'), `${durs} | ${ratios.join(' ')}`);
   const cost = await page.locator('#costLine').innerText();
   check('Cost line: Free + GPU-seconds estimate', /Free/.test(cost) && /reserves ≈ \d+s/.test(cost), cost);
-  check('Model list shows Free and Paid groups', (await page.locator('.model-group').count()) === 2 && /free/i.test(await page.locator('.model-group').first().innerText()));
+  check('Model list shows Free and Paid groups', (await page.locator('#modelCards .model-group').count()) === 2 && /free/i.test(await page.locator('#modelCards .model-group').first().innerText()));
   check('Negative prompt supported on Wan', /negative prompt/.test(await page.locator('#negNote').innerText()));
   await page.screenshot({ path: `${OUT}/02-studio-preview.png` });
 
@@ -284,7 +284,7 @@ try {
   gp.on('pageerror', (e) => gpErrors.push(e.message));
   await gp.goto('http://127.0.0.1:8788/frontend/index.html');
   await gp.waitForFunction(() => document.querySelector('#backendStatus').dataset.state === 'err');
-  check('Pages-style static hosting loads (sub-path, offline catalog)', gpErrors.length === 0 && (await gp.locator('.model').count()) === 6, gpErrors.join(' | '));
+  check('Pages-style static hosting loads (sub-path, offline catalog)', gpErrors.length === 0 && (await gp.locator('#modelCards .model').count()) === 7, gpErrors.join(' | '));
   await gp.click('[data-nav="settings"]');
   await gp.fill('#apiBase', 'http://127.0.0.1:8787');
   await gp.click('#saveBackend');

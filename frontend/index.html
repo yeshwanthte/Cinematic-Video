@@ -14,6 +14,7 @@
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
   <script type="module" src="js/image-studio.js"></script>
+  <script type="module" src="js/film-studio.js"></script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -37,6 +38,7 @@
     <nav class="nav" aria-label="Primary">
       <a href="#studio" data-nav="studio">Studio</a>
       <a href="#image" data-nav="image">Image</a>
+      <a href="#film" data-nav="film">Film</a>
       <a href="#story" data-nav="story">Story</a>
       <a href="#projects" data-nav="projects">Projects</a>
       <a href="#settings" data-nav="settings">Settings</a>
@@ -57,12 +59,14 @@
         <div class="hero-cta">
           <button class="btn btn-primary btn-lg" data-nav="studio">Create Video</button>
           <button class="btn btn-ghost btn-lg" data-nav="image">Image Studio</button>
+          <button class="btn btn-ghost btn-lg" data-nav="film">Film Studio · 10–30 s</button>
           <button class="btn btn-ghost btn-lg" data-nav="story">Story Mode</button>
         </div>
         <ul class="hero-facts">
           <li><strong id="heroModel">Wan 2.2 · Free</strong><span id="heroModelSub">Free · open-source model</span></li>
           <li><strong>Server-side keys</strong><span>Your secret never reaches the browser</span></li>
           <li><strong>Honest status</strong><span>Progress straight from the provider</span></li>
+          <li><strong>Films up to 30 s</strong><span>Real AI shots, assembled in your browser</span></li>
         </ul>
       </div>
 
@@ -87,6 +91,7 @@
               <span class="btn btn-primary">Upload Photo</span>
               <span class="drop-formats">JPG · JPEG · PNG · WEBP &nbsp;·&nbsp; up to 40 MB</span>
             </label>
+            <a class="t2v-link" href="#film" data-nav="film" id="t2vLink">No photo? Create a video from text in Film Studio →</a>
 
             <!-- preview -->
             <div class="preview" id="preview">
@@ -260,6 +265,22 @@
               <label class="field-label">Aspect ratio</label>
               <div class="segmented wrap" id="ratioSeg"></div>
               <p class="note" id="ratioNote"></p>
+              <label class="field-label" id="qualityLabel">Quality vs. time</label>
+              <div class="segmented" id="qualitySeg"></div>
+              <label class="field-label" id="fpsLabel">Frame rate</label>
+              <div class="segmented" id="fpsSeg"></div>
+              <div class="end-frame" id="endFrameBox" hidden>
+                <label class="field-label">End frame <span class="muted">(optional · first + last frame)</span></label>
+                <div class="row gap-s">
+                  <img id="endFrameImg" alt="End frame" hidden />
+                  <label class="btn btn-ghost btn-s" for="endFrameInput" id="endFrameAdd">Add end photo</label>
+                  <input type="file" id="endFrameInput" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden />
+                  <button class="btn btn-ghost btn-s" id="endFrameRemove" hidden>Remove</button>
+                </div>
+                <p class="note">The clip will move from your photo to this end photo. Use the same scene/person for a believable transition.</p>
+              </div>
+              <label class="toggle" id="spaceEnhanceWrap" hidden><input type="checkbox" id="spaceEnhance" /><span></span>Let the Space’s own enhancer rewrite my prompt</label>
+              <p class="note" id="modelExtraNote"></p>
               <div class="inline-fields">
                 <label class="toggle" id="audioToggleWrap" hidden><input type="checkbox" id="audioToggle" /><span></span>Native audio</label>
                 <label class="seed">Seed <input type="number" id="seedInput" min="0" max="4294967295" placeholder="random" inputmode="numeric" /></label>
@@ -312,7 +333,7 @@
                 <div class="gen-meta"><span>Elapsed <b id="iElapsed">0:00</b></span></div>
                 <div class="gen-error" id="iGenError" hidden>
                   <h3 id="iErrTitle"></h3><p id="iErrMsg"></p>
-                  <div class="row gap"><button class="btn btn-primary" id="iRetry">Try again</button><button class="btn btn-ghost" id="iBack">Back to editing</button></div>
+                  <div class="row gap"><button class="btn btn-primary" id="iRetry">Try again</button><button class="btn btn-accent" id="iSwitch" hidden>Try another model</button><button class="btn btn-ghost" id="iBack">Back to editing</button></div>
                 </div>
                 <div class="row gap gen-actions" id="iGenActions"><button class="btn btn-ghost" id="iCancel">Cancel</button></div>
               </div>
@@ -416,9 +437,158 @@
       </div>
       <ol class="scenes" id="scenes"></ol>
       <div class="panel render-card" id="renderCard" hidden>
-        <header><h3>Final video</h3><span class="badge warn">Not available yet</span></header>
-        <p class="muted">Combining scene clips into one video needs a backend render step (e.g. FFmpeg on a worker). That step is <strong>not implemented yet</strong> — <code>/api/render</code> returns 501. Download each scene clip and assemble them in your editor for now. Transitions you choose are saved with the project for when rendering ships.</p>
-        <button class="btn btn-ghost" id="renderTry">Check render endpoint</button>
+        <header><h3>Final video</h3><span class="badge live">In your browser</span></header>
+        <p class="muted">Joins the finished scene clips in order with each scene’s transition, then exports an H.264 MP4. Assembly runs locally with ffmpeg.wasm — nothing is uploaded. For continuous shots from one photo, music and shot planning, use <a href="#film" data-nav="film">Film Studio</a>.</p>
+        <div class="row gap-s wrap">
+          <button class="btn btn-primary" id="renderTry">Assemble story video</button>
+          <button class="btn btn-ghost" id="renderCancel" hidden>Cancel</button>
+        </div>
+        <div class="gen-progress" id="renderProgress" hidden><div class="bar"><span id="renderBar"></span></div><div class="gen-progress-meta"><span id="renderText">—</span></div></div>
+        <p class="warn" id="renderError" hidden></p>
+        <div class="fs-final" id="renderResult" hidden>
+          <video id="renderVideo" controls playsinline></video>
+          <ul class="fs-summary" id="renderSummary"></ul>
+          <button class="btn btn-primary" id="renderDownload"><svg class="i"><use href="#i-down"/></svg>Download story MP4</button>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================== FILM STUDIO -->
+    <section class="view view-film" data-view="film" hidden>
+      <div class="page-head">
+        <div>
+          <p class="eyebrow">Film Studio</p>
+          <h1 class="h-page">Idea → shot plan → film</h1>
+          <p class="muted">Plan a 10–30 s film, generate it shot by shot on free models, then assemble and export an MP4 in your browser. Each shot is a real, separate AI clip; longer films are <b>assembled</b> from them.</p>
+        </div>
+        <div class="row gap-s wrap">
+          <select class="input fs-select" id="fsFilmSelect" aria-label="Open a film"></select>
+          <button class="btn btn-ghost" id="fsNew">New film</button>
+          <button class="btn btn-ghost btn-danger-ghost" id="fsDelete" title="Delete this film from this browser">Delete</button>
+        </div>
+      </div>
+
+      <div class="fs-usage" id="fsUsage"></div>
+
+      <div class="fs-grid">
+        <!-- 01 idea -->
+        <section class="panel fs-idea">
+          <header><span class="step-no">01</span><h3>Idea &amp; source</h3></header>
+          <input class="input" id="fsTitle" maxlength="80" placeholder="Film title" aria-label="Film title" />
+          <div class="segmented" id="fsSource" role="radiogroup" aria-label="Source">
+            <button data-src="photo" role="radio">From my photo</button>
+            <button data-src="text" role="radio">Text only</button>
+          </div>
+          <div class="fs-photo" id="fsPhotoBox">
+            <label class="dropzone small fs-drop" id="fsDrop" for="fsPhotoInput">
+              <input type="file" id="fsPhotoInput" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden />
+              <img id="fsPhoto" alt="Film source photo" hidden />
+              <span class="drop-title" id="fsDropText">Drop the photo the film starts from</span>
+              <span class="btn btn-ghost btn-s">Choose photo</span>
+            </label>
+          </div>
+          <label class="field-label" for="fsIdea">Your idea</label>
+          <textarea id="fsIdea" rows="3" maxlength="600" placeholder="A couple walking on a beach at sunset, wind in their clothes, waves rolling in"></textarea>
+          <label class="field-label">Preset</label>
+          <div class="chips" id="fsPresets"></div>
+          <label class="field-label">Film length</label>
+          <div class="segmented wrap" id="fsLength"></div>
+          <label class="field-label">Motion</label>
+          <div class="segmented" id="fsIntensity"></div>
+          <label class="field-label">Model</label>
+          <div class="fs-models" id="fsModels"></div>
+          <label class="field-label">Aspect</label>
+          <div class="segmented wrap" id="fsRatio"></div>
+          <label class="field-label">Quality vs. time</label>
+          <div class="segmented wrap" id="fsQuality"></div>
+          <p class="note" id="fsModelNote"></p>
+          <button class="btn btn-primary" id="fsPlan">Plan shots</button>
+        </section>
+
+        <!-- 02 plan -->
+        <section class="panel fs-plan" id="fsPlanPanel">
+          <header><span class="step-no">02</span><h3>Shot plan</h3><span class="badge" id="fsPlanBadge">No plan yet</span></header>
+          <details class="fs-bible" id="fsBible" open>
+            <summary>Continuity bible <span class="muted small">— added to every shot so people, clothes and place stay consistent</span></summary>
+            <div class="fs-bible-grid">
+              <label>Subject<input class="input" data-bible="subject" maxlength="120" /></label>
+              <label>Wardrobe<input class="input" data-bible="wardrobe" maxlength="160" /></label>
+              <label class="wide">Setting<input class="input" data-bible="setting" maxlength="240" /></label>
+              <label>Lighting<input class="input" data-bible="lighting" maxlength="160" /></label>
+              <label>Look<input class="input" data-bible="look" maxlength="160" /></label>
+            </div>
+          </details>
+          <div class="fs-timeline" id="fsTimeline" aria-label="Timeline"></div>
+          <p class="note" id="fsTimelineNote"></p>
+          <ol class="fs-shots" id="fsShots"></ol>
+          <div class="row gap-s wrap">
+            <button class="btn btn-ghost btn-s" id="fsAddShot">+ Add shot</button>
+            <span class="grow"></span>
+            <button class="btn btn-ghost" id="fsStop" hidden>Stop after this shot</button>
+            <button class="btn btn-primary" id="fsGenerateAll" disabled>Approve plan &amp; generate shots</button>
+          </div>
+          <p class="warn" id="fsPlanWarn" hidden></p>
+        </section>
+
+        <!-- 03 assemble -->
+        <section class="panel fs-export" id="fsExportPanel">
+          <header><span class="step-no">03</span><h3>Assemble &amp; export</h3><span class="badge" id="fsExportBadge">Waiting for shots</span></header>
+          <div class="fs-two">
+            <div>
+              <label class="field-label">Transitions</label>
+              <div class="segmented wrap" id="fsTransition"></div>
+            </div>
+            <div>
+              <label class="field-label" for="fsTransSec">Transition length <b id="fsTransSecVal">0.5 s</b></label>
+              <input type="range" id="fsTransSec" min="0.2" max="1.5" step="0.1" value="0.5" />
+            </div>
+          </div>
+          <div class="fs-two">
+            <div>
+              <label class="field-label">Output size</label>
+              <div class="segmented wrap" id="fsOutSize"></div>
+            </div>
+            <div>
+              <label class="field-label">Frame rate</label>
+              <div class="segmented wrap" id="fsOutFps"></div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="fsInterp" /><span></span>Smooth to target fps with motion interpolation <small class="muted">(FFmpeg synthesizes in-between frames · slow)</small></label>
+          <label class="toggle"><input type="checkbox" id="fsFadeEdges" checked /><span></span>Fade in from / out to black</label>
+          <div class="fs-audio">
+            <label class="field-label">Audio</label>
+            <label class="toggle" id="fsOrigWrap"><input type="checkbox" id="fsOrigAudio" checked /><span></span>Keep the clips’ own AI audio <small class="muted" id="fsOrigNote"></small></label>
+            <div class="row gap-s wrap">
+              <label class="btn btn-ghost btn-s" for="fsMusicInput">Add music</label>
+              <input type="file" id="fsMusicInput" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" hidden />
+              <span class="muted small" id="fsMusicName">No music — your own track, MP3/M4A/WAV/OGG, max 25 MB</span>
+              <button class="btn btn-ghost btn-s" id="fsMusicRemove" hidden>Remove</button>
+            </div>
+            <div class="fs-mix" id="fsMix" hidden>
+              <label>Music volume <b id="fsMusVolVal">70%</b><input type="range" id="fsMusVol" min="0" max="1" step="0.05" value="0.7" /></label>
+              <label>Fade in <b id="fsMusInVal">1 s</b><input type="range" id="fsMusIn" min="0" max="5" step="0.5" value="1" /></label>
+              <label>Fade out <b id="fsMusOutVal">2 s</b><input type="range" id="fsMusOut" min="0" max="8" step="0.5" value="2" /></label>
+              <label>AI audio volume <b id="fsOrigVolVal">100%</b><input type="range" id="fsOrigVol" min="0" max="1.5" step="0.05" value="1" /></label>
+            </div>
+          </div>
+          <div class="row gap-s wrap">
+            <button class="btn btn-primary" id="fsExport" disabled>Export MP4</button>
+            <button class="btn btn-ghost" id="fsExportCancel" hidden>Cancel export</button>
+          </div>
+          <div class="gen-progress" id="fsExportProgress" hidden>
+            <div class="bar"><span id="fsExportBar"></span></div>
+            <div class="gen-progress-meta"><span id="fsExportText">—</span></div>
+          </div>
+          <p class="warn" id="fsExportError" hidden></p>
+          <div class="fs-final" id="fsFinal" hidden>
+            <video id="fsFinalVideo" controls playsinline preload="metadata"></video>
+            <ul class="fs-summary" id="fsFinalSummary"></ul>
+            <div class="row gap-s wrap">
+              <button class="btn btn-primary" id="fsDownload"><svg class="i"><use href="#i-down"/></svg>Download MP4</button>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -428,7 +598,7 @@
         <div>
           <p class="eyebrow">Library</p>
           <h1 class="h-page">Projects</h1>
-          <p class="muted">Stored in this browser. Source photos live in IndexedDB; videos are fetched fresh from the provider when opened.</p>
+          <p class="muted">Stored in this browser. Source photos and generated videos live in IndexedDB on this device. Films are under <a href="#film" data-nav="film">Film</a>.</p>
         </div>
         <button class="btn btn-primary" data-nav="studio">New project</button>
       </div>
@@ -487,13 +657,16 @@
             <li>Redeploy, then press <b>Save &amp; test connection</b>.</li>
             <li>Optional, paid: add <code>RUNWAY_API_KEY</code> to unlock Runway Gen-4.5 / Veo 3.1 in the model list.</li>
           </ol>
-          <p class="note">Free accounts get ≈5 minutes of ZeroGPU time per day (≈5–10 short clips). It resets 24 h after first use.</p>
+          <p class="note">Free accounts get 5 minutes of ZeroGPU time per day, PRO 40 minutes (Hugging Face docs, checked Oct 2026). It resets 24 h after first use. A 10 s Wan clip reserves about 1–1.5 min; an LTX clip 75 s.</p>
+          <p class="note">Prompt enhancement and photo analysis run in your browser for free. The optional hosted AI assistant (<code>HF_ASSISTANT=on</code>) uses Hugging Face Inference Provider credits — free accounts have none, so it is off unless you switch it on.</p>
           <p class="note">Local development: copy <code>.env.example</code> to <code>.env</code> and run <code>npm run dev</code>.</p>
         </section>
 
         <section class="panel">
-          <header><h3>Audio</h3><span class="badge">Roadmap</span></header>
-          <p class="muted">The free Wan 2.2 models generate silent video. Native audio exists only on the paid Veo 3.1 models (via Runway). Music, ambient beds, AI sound effects, voiceover and uploaded audio are <strong>not implemented</strong>; the project data model reserves an <code>audio</code> track for them.</p>
+          <header><h3>Audio</h3></header>
+          <p class="muted"><b>AI audio:</b> LTX-2.3 (free) generates sound together with the video. Wan 2.2 clips are silent. Runway Veo 3.1 (paid, optional) also has native audio.</p>
+          <p class="muted"><b>Your music:</b> Film Studio mixes an uploaded track (volume, fade in/out) with any AI audio when you export. It is labelled as your track, never as AI.</p>
+          <p class="note">Not implemented: AI voiceover, AI sound effects or AI music generation.</p>
         </section>
 
         <section class="panel">

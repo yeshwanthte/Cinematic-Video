@@ -129,7 +129,7 @@ const cache = new Map(); // key -> Promise<{dataUri,width,height,bytes}>
  * encode JPEG under the byte budget (backend limit 4 MB encoded, Runway data-URI limit 5 MB).
  */
 export function prepareForGeneration(imageId, bitmap, ratioValue, focus, { maxLong = 2048, maxDataUriBytes = 3_600_000 } = {}) {
-  const key = `${imageId}|${ratioValue}|${focus.x.toFixed(3)},${focus.y.toFixed(3)}|${maxLong}`;
+  const key = `${imageId}|${ratioValue}|${focus.x.toFixed(3)},${focus.y.toFixed(3)}|${maxLong}|${maxDataUriBytes}`;
   if (cache.has(key)) return cache.get(key);
   const job = (async () => {
     const { r } = parseRatio(ratioValue);

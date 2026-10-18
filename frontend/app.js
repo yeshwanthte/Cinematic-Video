@@ -6,6 +6,7 @@ import { analyzeOnDevice } from './js/analysis.js';
 import { StudioApi, ApiError, ERROR_TITLES } from './js/api-client.js';
 import { settingsStore, projectStore, imageStore, uid } from './js/storage.js';
 import { parseQuotaError, explainQuota, quotaLine } from './js/quota.js';
+import { gpuSeconds as gpuEstimate, gpuTally } from './js/gpu-estimate.js';
 
 // ====================================================================== state
 const DEFAULT_SETTINGS = {
@@ -50,6 +51,10 @@ state.controls = {
   ratio: '1280:720',
   seed: '',
   audio: false,
+  quality: '',
+  fps: '',
+  spaceEnhance: false,
+  endFrame: null, // { bitmap, name, thumb } — optional last frame (first+last-frame models)
 };
 
 const api = new StudioApi(() => state.settings);
@@ -181,7 +186,7 @@ async function checkHealth({ account = true } = {}) {
 // ====================================================================== routing
 function route() {
   const v = (location.hash || '#home').slice(1).split('/')[0];
-  setView(['home', 'studio', 'image', 'story', 'projects', 'settings'].includes(v) ? v : 'home', false);
+  setView(['home', 'studio', 'image', 'film', 'story', 'projects', 'settings'].includes(v) ? v : 'home', false);
 }
 function setView(name, push = true) {
   $$('.view').forEach((s) => (s.hidden = s.dataset.view !== name));
@@ -190,6 +195,7 @@ function setView(name, push = true) {
   if (name === 'projects') renderProjects();
   if (name === 'settings') renderSettings();
   if (name === 'story') renderStory();
+  if (name === 'film') window.dispatchEvent(new CustomEvent('cas:film-open'));
   if (name === 'studio') requestAnimationFrame(renderFrame);
   window.scrollTo({ top: 0 });
 }
@@ -222,6 +228,7 @@ function bindGlobal() {
     if (!files.length) return;
     const onStory = !$('[data-view="story"]').hidden;
     if (!$('[data-view="image"]').hidden) window.dispatchEvent(new CustomEvent('cas:image-files', { detail: { files } }));
+    else if (!$('[data-view="film"]').hidden) window.dispatchEvent(new CustomEvent('cas:film-files', { detail: { files } }));
     else if (onStory) addStoryFiles(files);
     else {
       if ($('[data-view="studio"]').hidden) setView('studio');
@@ -324,6 +331,11 @@ function syncModelControls() {
     c2.ratio = pick.value;
   }
   if (!c.audio) c2.audio = false;
+  const qs = c.qualityPresets || [];
+  if (!qs.some((q) => q.id === c2.quality)) c2.quality = c.defaultQuality || qs[0]?.id || '';
+  const fo = c.fpsOptions || [];
+  if (!fo.some((f) => String(f.value) === String(c2.fps))) c2.fps = fo[0]?.value ?? '';
+  if (!c.spaceEnhance) c2.spaceEnhance = false;
 }
 function allRatios() {
   return Object.values(state.catalog?.providers || {}).flatMap((p) => Object.values(p.models).flatMap((m) => m.ratios));
@@ -375,6 +387,26 @@ function renderModelSettings() {
   $('#ratioNote').textContent = notes.join(' ');
   $('#audioToggleWrap').hidden = !c.audio;
   $('#audioToggle').checked = Boolean(c2.audio);
+  const qs = c.qualityPresets || [];
+  $('#qualityLabel').hidden = $('#qualitySeg').hidden = qs.length < 2;
+  $('#qualitySeg').innerHTML = qs.map((q) => `<button data-quality="${q.id}" class="${q.id === c2.quality ? 'on' : ''}" title="${esc(q.note || '')}">${esc(q.label)}</button>`).join('');
+  const fo = c.fpsOptions || [];
+  $('#fpsLabel').hidden = $('#fpsSeg').hidden = fo.length < 2;
+  $('#fpsSeg').innerHTML = fo.map((f) => `<button data-fps="${f.value}" class="${String(f.value) === String(c2.fps) ? 'on' : ''}" title="${esc(f.note || '')}">${f.value} fps<small>${f.interpolated ? 'RIFE' : 'native'}</small></button>`).join('');
+  $('#endFrameBox').hidden = !c.lastFrame;
+  $('#endFrameImg').hidden = !c2.endFrame;
+  if (c2.endFrame) $('#endFrameImg').src = c2.endFrame.thumb;
+  $('#endFrameRemove').hidden = !c2.endFrame;
+  $('#endFrameAdd').textContent = c2.endFrame ? 'Replace' : 'Add end photo';
+  $('#spaceEnhanceWrap').hidden = !c.spaceEnhance;
+  $('#spaceEnhance').checked = Boolean(c2.spaceEnhance);
+  const extra = [];
+  const fsel = fo.find((f) => String(f.value) === String(c2.fps));
+  if (fsel?.interpolated) extra.push(`${fsel.value} fps: ${fsel.note}.`);
+  if (c.nativeAudio) extra.push('This model generates its own audio together with the video.');
+  if (c.license && c.license !== 'Apache-2.0') extra.push(`License: ${c.license} (free under US$10M annual revenue; label results as AI-generated).`);
+  if (c.durations.max > 5 && c.free) extra.push(`For films longer than ${c.durations.max} s, use Film Studio — it chains clips from each one’s last frame.`);
+  $('#modelExtraNote').textContent = extra.join(' ');
   $('#seedInput').value = c2.seed;
   $('#promptInput').maxLength = c.promptMaxChars;
   renderCost();
@@ -407,15 +439,8 @@ function renderCost() {
   line.innerHTML = `<span>${est}</span>${bal != null ? `<span>Balance <b>${bal.toLocaleString()}</b></span>` : ''}`;
 }
 
-// GPU-time estimate using the formula published in the Space's own code.
-function gpuSeconds(c, controls) {
-  const g = c.gpuEstimate;
-  if (!g) return null;
-  const [w, h] = controls.ratio.split(':').map(Number);
-  const frames = 1 + Math.min(g.maxFrames, Math.max(g.minFrames, Math.round(controls.duration * g.fps)));
-  const factor = (frames * w * h) / g.baseVolume;
-  return Math.round(g.base + g.steps * g.stepSeconds * factor ** 1.5);
-}
+// GPU-time estimate using the formula published in the Space's own code (js/gpu-estimate.js).
+const gpuSeconds = (c, controls) => gpuEstimate(c, controls);
 
 function renderNegNote() {
   const c = caps();
@@ -587,7 +612,9 @@ function bindStudio() {
     } else if (d.ratio) {
       c.ratio = d.ratio;
       renderFrame();
-    } else return;
+    } else if (d.quality) c.quality = d.quality;
+    else if (d.fps) c.fps = Number(d.fps);
+    else return;
     if (!d.category) state.touched = true;
     renderControls();
     updatePrompt();
@@ -602,6 +629,23 @@ function bindStudio() {
   $('#rebuildPrompt').addEventListener('click', () => updatePrompt(true));
   $('#enhancePrompt').addEventListener('click', enhance);
   $('#audioToggle').addEventListener('change', (e) => (state.controls.audio = e.target.checked));
+  $('#spaceEnhance').addEventListener('change', (e) => (state.controls.spaceEnhance = e.target.checked));
+  $('#endFrameInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const { bitmap } = await loadImageFile(file);
+      state.controls.endFrame = { bitmap, name: file.name, thumb: await makeJpegDataUri(bitmap, 160, 0.7), id: uid('end') };
+      renderModelSettings();
+    } catch (err) {
+      toast('This end photo can’t be used', err.message, 'err');
+    }
+  });
+  $('#endFrameRemove').addEventListener('click', () => {
+    state.controls.endFrame = null;
+    renderModelSettings();
+  });
   $('#seedInput').addEventListener('input', (e) => (state.controls.seed = e.target.value.replace(/\D/g, '')));
   $('#applyRecommend').addEventListener('click', () => {
     const img = activeImage();
@@ -1012,8 +1056,12 @@ function stepsUI() {
   };
 }
 
+const endFrames = new Map(); // genId -> end-frame bitmap (kept out of persisted JSON)
 function snapshotControls() {
-  return JSON.parse(JSON.stringify(state.controls));
+  const { endFrame, ...rest } = state.controls;
+  const snap = JSON.parse(JSON.stringify(rest));
+  if (endFrame) snap.endFrame = { name: endFrame.name, id: endFrame.id, _bitmap: endFrame.bitmap };
+  return snap;
 }
 
 function newGeneration(img, overrides = {}) {
@@ -1023,8 +1071,11 @@ function newGeneration(img, overrides = {}) {
   const negativePrompt = overrides.negativePrompt ?? buildPrompt({ ...c, analysis: img.analysis, caps: m }).negativePrompt;
   const seedRaw = overrides.seed ?? c.seed;
   const r = ratioInfo(c.ratio, m);
+  const id = uid('gen');
+  if (c.endFrame?._bitmap && m?.lastFrame) endFrames.set(id, { bitmap: c.endFrame._bitmap, id: c.endFrame.id });
+  if (c.endFrame) c.endFrame = { name: c.endFrame.name, id: c.endFrame.id };
   return {
-    id: uid('gen'),
+    id,
     projectId: img.projectId,
     label: overrides.label || 'Original',
     provider: c.provider,
@@ -1039,6 +1090,10 @@ function newGeneration(img, overrides = {}) {
     resolution: r?.resolution,
     seed: seedRaw === '' || seedRaw == null ? undefined : Number(seedRaw),
     audio: m?.audio ? Boolean(c.audio) : undefined,
+    quality: c.quality || undefined,
+    fps: c.fps || undefined,
+    spaceEnhance: m?.spaceEnhance ? Boolean(c.spaceEnhance) : undefined,
+    endFrameName: endFrames.has(id) ? c.endFrame?.name : undefined,
     focus: { ...img.focus },
     controls: c,
     status: 'preparing',
@@ -1076,10 +1131,12 @@ async function runGeneration(gen, img, hooks = {}) {
     step('prepare', 'active');
     const m = caps(gen.provider, gen.model);
     if (!m) throw new ApiError({ code: 'UNSUPPORTED_OPTION', message: `Model ${gen.model} is not in the configuration.` });
-    const maxBytes = Math.min(state.catalog?.limits?.maxImageDataUriBytes || 4e6, 3_600_000);
+    const end = endFrames.get(gen.id);
+    const maxBytes = Math.min(state.catalog?.limits?.maxImageDataUriBytes || 4e6, 3_600_000) / (end ? 2 : 1);
     const prepared = await prepareForGeneration(img.id, img.bitmap, gen.ratio, gen.focus, { maxDataUriBytes: maxBytes });
     job.prepared = prepared;
-    step('prepare', 'done', `${prepared.width}×${prepared.height} JPEG · ${fmtBytes(prepared.bytes)} encoded`);
+    const endPrepared = end ? await prepareForGeneration(`end_${end.id}`, end.bitmap, gen.ratio, { x: 0.5, y: 0.5 }, { maxDataUriBytes: maxBytes }) : null;
+    step('prepare', 'done', `${prepared.width}×${prepared.height} JPEG · ${fmtBytes(prepared.bytes)} encoded${endPrepared ? ' + end frame' : ''}`);
 
     // 02 — prompt
     step('prompt', 'active');
@@ -1101,6 +1158,8 @@ async function runGeneration(gen, img, hooks = {}) {
       } else if (ev.type === 'started') {
         set({ status: 'running' });
         step('render', 'active', 'GPU allocated — the model is running');
+      } else if (ev.type === 'retrying') {
+        step('send', 'active', 'The Space crashed — retrying once automatically…');
       } else if (ev.type === 'saving') {
         hooks.progressDone?.();
         step('final', 'active', 'Receiving the video from the Space');
@@ -1120,6 +1179,10 @@ async function runGeneration(gen, img, hooks = {}) {
         ratio: gen.ratio,
         seed: gen.seed,
         audio: gen.audio,
+        lastImage: endPrepared?.dataUri,
+        quality: gen.quality,
+        fps: gen.fps,
+        enhance: gen.spaceEnhance,
       },
       streamed ? { onEvent, signal: job.abort.signal, timeoutMs: Math.max(3, Number(state.settings.timeoutMin) || 15) * 60_000 } : {}
     );
@@ -1136,6 +1199,8 @@ async function runGeneration(gen, img, hooks = {}) {
           saveError = err;
         }
       }
+      gpuTally.add(gpuSeconds(m, gen));
+      endFrames.delete(gen.id);
       if (blob) {
         await imageStore.put(`video_${gen.id}`, blob);
         set({ status: 'succeeded', progress: 1, videoUrl: r.outputs[0], localVideo: true, videoBytes: blob.size, seedUsed: r.seed, completedAt: new Date().toISOString() });
@@ -1883,10 +1948,11 @@ function bindSettings() {
     projectStore.clear();
     await imageStore.clear();
     localStorage.removeItem('cas.story.v1');
+    localStorage.removeItem('cas.films.v1');
     state.story.scenes = [];
     b.dataset.confirm = '';
     b.textContent = 'Delete all local projects';
-    toast('Local data deleted', 'Projects, photos and story scenes were removed from this browser.', 'ok');
+    toast('Local data deleted', 'Projects, photos, story scenes and films were removed from this browser. Reload to start fresh.', 'ok');
   });
 }
 
@@ -1939,14 +2005,15 @@ function bindStory() {
     e.target.value = '';
   });
   $('#storyGenerate').addEventListener('click', generateStory);
-  $('#renderTry').addEventListener('click', async () => {
-    try {
-      const r = await fetch(api.url('render'), { method: 'POST' });
-      const j = await r.json().catch(() => ({}));
-      toast(`Render endpoint: HTTP ${r.status}`, j?.error?.message || 'Unexpected response', r.ok ? 'ok' : 'err');
-    } catch (e) {
-      toast('Render endpoint unreachable', e.message, 'err');
-    }
+  $('#renderTry').addEventListener('click', assembleStory);
+  $('#renderCancel').addEventListener('click', () => storyExport?.abort());
+  $('#renderDownload').addEventListener('click', () => {
+    if (!storyBlob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(storyBlob);
+    a.download = 'story.mp4';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30_000);
   });
   $('#scenes').addEventListener('change', (e) => {
     const li = e.target.closest('[data-scene]');
@@ -2046,6 +2113,52 @@ async function generateScene(sc) {
     Object.assign(sc, { status: 'failed', error: errInfo(e) });
     saveStory();
     renderStory();
+  }
+}
+// Story → one MP4, assembled in the browser (ffmpeg.wasm). Scene i's "transition out" is used between i and i+1.
+const STORY_XFADE = { Cut: 'cut', Crossfade: 'crossfade', 'Dip to black': 'dip', 'Whip pan': 'slideleft' };
+let storyExport = null;
+let storyBlob = null;
+async function assembleStory() {
+  const scenes = state.story.scenes.filter((s) => s.status === 'succeeded' && s.videoKey);
+  if (scenes.length < 2) return toast('Generate at least two scenes first', 'Only scenes saved in this browser can be assembled.');
+  storyExport = new AbortController();
+  $('#renderTry').disabled = true;
+  $('#renderCancel').hidden = false;
+  $('#renderProgress').hidden = false;
+  $('#renderError').hidden = true;
+  try {
+    const { assembleFilm } = await import('./js/assembler.js');
+    const clips = [];
+    for (const [i, sc] of scenes.entries()) {
+      const blob = await imageStore.get(sc.videoKey);
+      if (!blob) throw new Error(`Scene ${i + 1}'s clip is missing from this browser — regenerate it.`);
+      clips.push({ blob, trimStart: 0, transition: i ? STORY_XFADE[scenes[i - 1].transition] || 'crossfade' : 'none' });
+    }
+    const r = await assembleFilm({
+      clips,
+      settings: { transition: 'crossfade', transitionSeconds: 0.5, width: 'native', height: 'native', fps: 'native', fadeEdges: true, keepOriginalAudio: true },
+      signal: storyExport.signal,
+      onProgress: (p) => {
+        $('#renderText').textContent = p.text;
+        $('#renderBar').style.width = p.fraction == null ? '100%' : `${Math.round(p.fraction * 100)}%`;
+      },
+    });
+    storyBlob = r.blob;
+    $('#renderVideo').src = URL.createObjectURL(r.blob);
+    $('#renderSummary').innerHTML = r.summary.map((l) => `<li>${esc(l)}</li>`).join('');
+    $('#renderResult').hidden = false;
+    toast('Story video ready', `${r.seconds.toFixed(1)} s MP4`, 'ok');
+  } catch (e) {
+    if (e?.code !== 'CANCELLED') {
+      $('#renderError').hidden = false;
+      $('#renderError').textContent = `Could not assemble the story: ${e.message || e}`;
+    }
+  } finally {
+    storyExport = null;
+    $('#renderTry').disabled = false;
+    $('#renderCancel').hidden = true;
+    $('#renderProgress').hidden = true;
   }
 }
 async function generateStory() {

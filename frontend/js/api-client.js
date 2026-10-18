@@ -25,8 +25,9 @@ export class StudioApi {
     return `${this.base}/api/${path}`;
   }
 
-  async #call(path, { method = 'GET', body, timeoutMs = 45_000, raw = false, signal, onEvent } = {}) {
+  async #call(path, { method = 'GET', body, timeoutMs = 45_000, raw = false, signal, onEvent, requestId } = {}) {
     const headers = {};
+    if (requestId) headers['X-Request-Id'] = requestId; // lets the backend refuse accidental duplicates
     const code = this.getSettings().accessCode;
     if (code) headers['X-Studio-Access'] = code;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -146,12 +147,12 @@ export class StudioApi {
     return this.#call('models', { timeoutMs: 15_000 });
   }
   /** Runway: returns { taskId, … } for polling. Streamed providers: calls onEvent live and returns the final event. */
-  generate(job, { onEvent, signal, timeoutMs = 90_000 } = {}) {
-    return this.#call('generate', { method: 'POST', body: job, timeoutMs, onEvent, signal });
+  generate(job, { onEvent, signal, timeoutMs = 90_000, requestId = newRequestId() } = {}) {
+    return this.#call('generate', { method: 'POST', body: job, timeoutMs, onEvent, signal, requestId });
   }
   /** Image generation / editing — always streamed. */
-  image(job, { onEvent, signal, timeoutMs = 280_000 } = {}) {
-    return this.#call('image', { method: 'POST', body: job, timeoutMs, onEvent: onEvent || (() => {}), signal });
+  image(job, { onEvent, signal, timeoutMs = 280_000, requestId = newRequestId() } = {}) {
+    return this.#call('image', { method: 'POST', body: job, timeoutMs, onEvent: onEvent || (() => {}), signal, requestId });
   }
   status(provider, taskId) {
     return this.#call(`status?provider=${encodeURIComponent(provider)}&id=${encodeURIComponent(taskId)}`, { timeoutMs: 30_000 });
@@ -175,6 +176,12 @@ export class StudioApi {
   }
 }
 
+export function newRequestId() {
+  const a = new Uint8Array(12);
+  crypto.getRandomValues(a);
+  return 'req_' + [...a].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Human-readable titles for error codes; the real provider message is always shown beneath. */
 export const ERROR_TITLES = {
   INVALID_REQUEST: 'The request was rejected.',
@@ -194,6 +201,7 @@ export const ERROR_TITLES = {
   CONTENT_MODERATION: 'The provider’s content moderation blocked this generation.',
   GENERATION_FAILED: 'Generation failed. The AI provider returned an error.',
   NOT_FOUND: 'Task not found.',
+  DUPLICATE_REQUEST: 'That request was already sent — it was not started twice.',
   TIMEOUT: 'Generation timed out. Please try again.',
   NETWORK: 'Network problem — could not reach your backend.',
   NOT_IMPLEMENTED: 'Not implemented yet.',

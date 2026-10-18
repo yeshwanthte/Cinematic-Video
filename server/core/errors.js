@@ -19,6 +19,7 @@ export const ErrorCodes = {
   CONTENT_MODERATION: { status: 422, retryable: false },
   GENERATION_FAILED: { status: 422, retryable: true },
   NOT_FOUND: { status: 404, retryable: false },
+  DUPLICATE_REQUEST: { status: 409, retryable: false },
   TIMEOUT: { status: 504, retryable: true },
   NETWORK: { status: 502, retryable: true },
   NOT_IMPLEMENTED: { status: 501, retryable: false },

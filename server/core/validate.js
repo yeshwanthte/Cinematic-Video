@@ -58,11 +58,29 @@ export function validateJob(body) {
   const providerId = body.provider || MODELS.defaultProvider;
   const modelId = body.model || MODELS.defaultModel;
   const caps = getCapabilities(providerId, modelId);
+  const modes = caps.modes || ['i2v'];
 
-  validateImage(body.image);
+  // i2v = animate a photo; t2v = text only (only for models that genuinely support it)
+  const mode = body.mode === 't2v' ? 't2v' : 'i2v';
+  if (!modes.includes(mode)) {
+    throw new StudioError('UNSUPPORTED_OPTION', mode === 't2v' ? `${caps.label} needs a photo — it does not do text-to-video. Choose a model that supports text-to-video.` : `${caps.label} does not animate photos.`);
+  }
+  if (mode === 'i2v') validateImage(body.image);
+
+  let lastImage;
+  if (body.lastImage) {
+    if (!caps.lastFrame) throw new StudioError('UNSUPPORTED_OPTION', `${caps.label} does not support an end frame (first + last frame conditioning).`);
+    if (mode !== 'i2v') throw new StudioError('UNSUPPORTED_OPTION', 'An end frame needs a start photo.');
+    validateImage(body.lastImage);
+    lastImage = body.lastImage;
+  }
+  const total = (typeof body.image === 'string' ? body.image.length : 0) + (lastImage ? lastImage.length : 0);
+  if (total > MODELS.limits.maxImageDataUriBytes) {
+    throw new StudioError('IMAGE_TOO_LARGE', `Start and end frames together are ${(total / 1e6).toFixed(1)} MB; the limit is ${(MODELS.limits.maxImageDataUriBytes / 1e6).toFixed(1)} MB.`);
+  }
 
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
-  if (caps.promptRequired && !prompt) throw new StudioError('INVALID_REQUEST', `${caps.label} requires a motion prompt.`);
+  if ((caps.promptRequired || mode === 't2v') && !prompt) throw new StudioError('INVALID_REQUEST', `${caps.label} requires a prompt${mode === 't2v' ? ' describing the shot' : ''}.`);
   if (prompt.length > caps.promptMaxChars) {
     throw new StudioError('PROMPT_TOO_LONG', `Prompt is ${prompt.length} characters; ${caps.label} accepts up to ${caps.promptMaxChars}.`);
   }
@@ -88,6 +106,20 @@ export function validateJob(body) {
     }
   }
 
+  let quality;
+  if (body.quality !== undefined && body.quality !== null && body.quality !== '') {
+    quality = (caps.qualityPresets || []).find((q) => q.id === body.quality);
+    if (!quality) throw new StudioError('UNSUPPORTED_OPTION', `${caps.label} has no "${body.quality}" quality setting.`);
+  } else if (caps.qualityPresets?.length) {
+    quality = caps.qualityPresets.find((q) => q.id === caps.defaultQuality) || caps.qualityPresets[0];
+  }
+
+  let fps;
+  if (body.fps !== undefined && body.fps !== null && body.fps !== '') {
+    fps = (caps.fpsOptions || []).find((f) => f.value === Number(body.fps));
+    if (!fps) throw new StudioError('UNSUPPORTED_OPTION', `${caps.label} does not output ${body.fps} fps.`);
+  }
+
   const negativePrompt = typeof body.negativePrompt === 'string' ? body.negativePrompt.trim().slice(0, 1000) : '';
 
   return {
@@ -95,13 +127,20 @@ export function validateJob(body) {
     caps,
     job: {
       model: modelId,
-      image: body.image,
+      mode,
+      image: mode === 'i2v' ? body.image : undefined,
+      lastImage,
       prompt,
       negativePrompt: caps.negativePrompt ? negativePrompt : '',
       duration,
       ratio,
       seed,
       audio: caps.audio ? Boolean(body.audio) : undefined,
+      steps: quality?.steps,
+      quality: quality?.id,
+      fps: fps?.value,
+      frameMultiplier: fps?.multiplier,
+      enhance: caps.spaceEnhance ? Boolean(body.enhance) : undefined,
     },
   };
 }
@@ -117,7 +156,7 @@ export function getImageCapabilities(providerId, modelId) {
 export function validateImageJob(body) {
   if (!body || typeof body !== 'object') throw new StudioError('INVALID_REQUEST', 'Request body must be JSON.');
   const providerId = body.provider || 'huggingface';
-  const modelId = body.model || 'qwen-edit-fast';
+  const modelId = body.model || 'flux-kontext';
   const caps = getImageCapabilities(providerId, modelId);
   const mode = body.mode === 'create' ? 'create' : 'edit';
   if (!caps.modes.includes(mode)) {
