@@ -1,0 +1,47 @@
+name: Deploy video server to Modal
+on:
+  workflow_dispatch:
+    inputs:
+      download_weights:
+        description: 'Download the model weights (needed the first time, ~70 GB, 20-40 min, CPU only)'
+        type: boolean
+        default: true
+      gpu:
+        description: 'GPU type'
+        type: choice
+        options: [H200, H100]
+        default: H200
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      STUDIO_MODAL_GPU: ${{ inputs.gpu }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check secrets
+        run: |
+          for v in MODAL_TOKEN_ID MODAL_TOKEN_SECRET; do [ -n "${!v}" ] || { echo "::error::Add the $v repository secret first"; exit 1; }; done
+          [ -n "${{ secrets.STUDIO_MODAL_SECRET }}" ] || { echo "::error::Add the STUDIO_MODAL_SECRET repository secret first"; exit 1; }
+      - run: pip install modal==1.6.2
+      - name: Store the shared secret in Modal
+        run: modal secret create cinematic-studio STUDIO_MODAL_SECRET="${{ secrets.STUDIO_MODAL_SECRET }}" --force
+      - name: Deploy
+        run: modal deploy modal/wan_app.py | tee deploy.log
+      - name: Download model weights (first run)
+        if: ${{ inputs.download_weights }}
+        run: modal run modal/wan_app.py::download_weights
+      - name: Show the URL for Vercel
+        run: |
+          URL=$(grep -oE 'https://[a-zA-Z0-9.-]+--cinematic-studio-wan-api[a-zA-Z0-9.-]*\.modal\.run' deploy.log | head -1)
+          echo "### Modal video server deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Add these in Vercel -> Settings -> Environment Variables, then redeploy:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- MODAL_ENDPOINT_URL = ${URL:-see the Deploy step log}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- MODAL_API_SECRET = the same value as your STUDIO_MODAL_SECRET" >> "$GITHUB_STEP_SUMMARY"
