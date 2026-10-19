@@ -37,9 +37,11 @@ await Promise.all([
   start('python3', ['-u', FAKE], { MODE: 'long', PORT: '7882' }, 'Running on local URL', 'long'),
   start('python3', ['-u', FAKE], { MODE: 'ltx', PORT: '7881' }, 'Running on local URL', 'ltx'),
   start('python3', ['-u', FAKE], { MODE: 'fast', PORT: '7883' }, 'Running on local URL', 'fast'),
+  start('node', ['tests/e2e/fake_modal_app.js'], { PORT: '7890', STUDIO_MODAL_SECRET: 'test-modal-secret' }, 'fake modal app', 'modal'),
 ]);
 await start('node', ['dev-server.js'], {
   PORT: '8787', HF_TOKEN: 'hf_test_local', RATE_LIMIT_PER_HOUR: '500',
+  MODAL_ENDPOINT_URL: 'http://127.0.0.1:7890', MODAL_API_SECRET: 'test-modal-secret',
   HF_SPACE_OVERRIDES: JSON.stringify({ 'wan2.2-long': 'http://127.0.0.1:7882/', 'ltx-2.3': 'http://127.0.0.1:7881/', 'wan2.2-fast': 'http://127.0.0.1:7883/' }),
 }, 'Cinematic AI Studio', 'dev');
 
@@ -71,7 +73,7 @@ const waitShot = (i, cls, timeout = 90000) => page.waitForFunction(([i, cls]) =>
 try {
   await page.goto('http://127.0.0.1:8787/#film');
   await page.waitForSelector('#fsModels .model');
-  check('Film Studio lists the free models', (await page.locator('#fsModels .model').count()) === 3, await page.locator('#fsModels .model b').allInnerTexts().then((t) => t.join(' | ')));
+  check('Film Studio lists the free models (Hugging Face + Modal)', (await page.locator('#fsModels .model').count()) === 4, await page.locator('#fsModels .model b').allInnerTexts().then((t) => t.join(' | ')));
 
   // 01 — idea
   await page.setInputFiles('#fsPhotoInput', path.join(FIX, 'portrait.jpg'));
@@ -204,6 +206,61 @@ try {
   await page.click('#renderTry');
   await page.waitForSelector('#renderResult:not([hidden])', { timeout: 180000 });
   check('Story Mode assembles its scenes into one MP4', /2 AI-generated clips/.test(await page.locator('#renderSummary').innerText()));
+
+  // ---- Modal (your free monthly credits): Studio, 720p + end frame + Max detail
+  const modalCalls = async () => (await (await fetch('http://127.0.0.1:7890/__calls', { headers: { Authorization: 'Bearer test-modal-secret' } })).json());
+  await page.goto('http://127.0.0.1:8787/#studio');
+  await page.setInputFiles('#fileInput', path.join(FIX, 'landscape.png'));
+  await page.waitForSelector('#stage[data-state="preview"]');
+  await page.click('[data-model="wan2.2-modal"]');
+  check('Modal model shows its credit-based cost line', /Modal/.test(await page.locator('#costLine').innerText()) && /month/.test(await page.locator('#costLine').innerText()), await page.locator('#costLine').innerText());
+  await page.click('[data-resolution="720p"]');
+  await page.click('[data-quality="max"]');
+  await page.setInputFiles('#endFrameInput', path.join(FIX, 'portrait.jpg'));
+  await page.waitForSelector('#endFrameImg:not([hidden])');
+  await page.waitForSelector('#generateBtn:not([disabled])');
+  await page.click('#generateBtn');
+  await page.waitForSelector('#stage[data-state="result"]', { timeout: 120000 });
+  const mc = (await modalCalls()).pop();
+  check('Modal job got 720p, 8 steps, end frame and negative prompt', mc?.max_dim === 1280 && mc.steps === 8 && mc.last_image && mc.negative, JSON.stringify(mc));
+  const vsize = await page.evaluate(() => [document.querySelector('#video').videoWidth, document.querySelector('#video').videoHeight]);
+  check('Modal result plays from this browser at 720p', vsize[0] === 1280 && vsize[1] === 720, vsize.join('×'));
+  await page.click('#btnEdit').catch(() => {});
+
+  // Modal out-of-credits is explained
+  await page.goto('http://127.0.0.1:8787/#studio');
+  await page.setInputFiles('#fileInput', path.join(FIX, 'landscape.png'));
+  await page.waitForSelector('#stage[data-state="preview"]');
+  await page.click('[data-model="wan2.2-modal"]');
+  await page.fill('#promptInput', 'CREDITS test');
+  await page.click('#generateBtn');
+  await page.waitForSelector('#genError:not([hidden])', { timeout: 60000 });
+  check('Modal credits running out is explained', /credits for this month/.test(await page.locator('#genErrMsg').innerText()), await page.locator('#genErrMsg').innerText());
+
+  // Film Studio on Modal: 10 s = 2 chained 5 s shots through the polled path
+  await page.goto('http://127.0.0.1:8787/#film');
+  await page.waitForSelector('#fsModels .model');
+  await page.click('#fsNew');
+  await page.setInputFiles('#fsPhotoInput', path.join(FIX, 'landscape.png'));
+  await page.waitForSelector('#fsPhoto:not([hidden])');
+  await page.click('[data-fmodel="wan2.2-modal"]');
+  await page.click('[data-len="10"]');
+  await page.click('#fsPlan');
+  await page.waitForSelector('.fs-shot');
+  check('Modal film: 10 s → 2 shots of 5 s', (await page.locator('.fs-shot').count()) === 2 && /Modal GPU/.test(await page.locator('#fsTimelineNote').innerText()));
+  await page.click('#fsGenerateAll');
+  await waitShot(0, 'done', 120000);
+  await waitShot(1, 'done', 120000);
+  check('Both Modal shots generated and chained', (await page.locator('.fs-seg.done').count()) === 2);
+  await page.click('#fsExport');
+  await page.waitForSelector('#fsFinal:not([hidden])', { timeout: 180000 });
+  check('Modal film exports to MP4', /2 AI-generated clips/.test(await page.locator('#fsFinalSummary').innerText()));
+
+  // Settings shows the Modal app as reachable
+  await page.goto('http://127.0.0.1:8787/#settings');
+  await page.click('#saveBackend');
+  await page.waitForFunction(() => /Modal/.test(document.querySelector('#diag')?.innerText || '') && /H200/.test(document.querySelector('#diag')?.innerText || ''), null, { timeout: 20000 }).catch(() => {});
+  check('Settings diagnostics show the Modal app on its GPU', /H200/.test(await page.locator('#diag').innerText()), (await page.locator('#diag').innerText()).replace(/\n/g, ' | ').slice(0, 200));
 
   check('No page errors', errors.length === 0, errors.join(' | '));
 } catch (e) {

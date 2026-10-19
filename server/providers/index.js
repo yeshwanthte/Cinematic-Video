@@ -1,5 +1,6 @@
 import { RunwayProvider } from './RunwayProvider.js';
 import { HuggingFaceProvider } from './HuggingFaceProvider.js';
+import { ModalProvider } from './ModalProvider.js';
 import { StudioError } from '../core/errors.js';
 
 /**
@@ -23,6 +24,7 @@ function parseOverrides(env) {
 
 const FACTORIES = {
   huggingface: (env) => new HuggingFaceProvider({ token: env.HF_TOKEN, spaceOverrides: parseOverrides(env) }),
+  modal: (env) => new ModalProvider({ endpoint: env.MODAL_ENDPOINT_URL, secret: env.MODAL_API_SECRET }),
   runway: (env) =>
     new RunwayProvider({
       apiKey: env.RUNWAY_API_KEY || env.RUNWAYML_API_SECRET,

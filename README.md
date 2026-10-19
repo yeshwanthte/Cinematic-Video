@@ -6,6 +6,7 @@
 |---|---|---|
 | Video models | **Wan 2.2 14B Fast** (≤5 s) · **Wan 2.2 Director** (≤10 s, first + last frame, RIFE 32 fps) · **LTX-2.3 Distilled** (≤10 s, text **or** photo → video, 24 fps, native AI audio) — all on Hugging Face ZeroGPU Spaces | Runway Gen-4.5, Gen-4 Turbo, Veo 3.1 / 3.1 Fast |
 | Longer videos | **Film Studio**: 10–30 s films assembled from real AI shots; each shot can start from the previous shot's real last frame | same workflow |
+| Second free option | **Your own Wan 2.2 on Modal** — US$30 of free compute every month, no daily cap, 480p/720p, end frame (optional; needs a card on file, spend limit $0) | — |
 | What you need | A free Hugging Face account and token | A Runway API key and credits |
 | Limits | 5 min of ZeroGPU per day on a free account, 40 min on PRO (HF docs, checked Oct 2026). A 10 s Wan clip reserves ≈1–1.5 min, an LTX clip 75 s | Pay per second |
 | Output | Wan: 480p, 16 fps (32 fps with RIFE). LTX: up to 1536×1024, 24 fps, with audio | 720p–1080p, up to 10 s |
@@ -41,7 +42,8 @@ frontend/vendor/ffmpeg/        @ffmpeg/ffmpeg 0.12.15 + @ffmpeg/util 0.12.2 (MIT
 api/*.js              Vercel Functions (thin wrappers)
 server/models.js      the only place model capabilities, limits and pricing are defined
 server/core/          router (streams + JSON), validation, errors, AI assistant
-server/providers/     VideoProvider (abstract) · HuggingFaceProvider (free) · RunwayProvider (paid)
+server/providers/     VideoProvider (abstract) · HuggingFaceProvider (free) · ModalProvider (free credits) · RunwayProvider (paid)
+modal/wan_app.py      your own Wan 2.2 GPU server on Modal (deployed by .github/workflows/deploy-modal.yml)
 dev-server.js         local server: frontend + API
 tests/                unit tests + full browser e2e (with a real Gradio test Space and a Runway test double)
 ```
@@ -116,6 +118,21 @@ Edit a photo from a written instruction, or create a new image from text. It run
 
 What it is not: a single 30 s AI generation. No free model generates 30 s natively. The timeline always shows native clip length vs assembled length.
 
+## Free extra GPU with Modal (optional)
+
+Hugging Face gives 5 GPU-minutes a day. Modal's Starter plan gives **US$30 of compute every month**, which runs the same open Wan 2.2 14B model on your own GPU: no shared queue, no daily cap, 480p or **720p**, and an optional end frame. A clip costs roughly US$0.08–0.45 of those credits (warm vs. cold start; estimate), so about 70–250 clips a month.
+
+**Is it really free?** Modal asks for a payment method on file. Set the workspace **spend limit to $0** (Modal → Settings → Usage & Billing) and Modal stops work instead of billing you once the monthly credits are used. The app also never runs more than one GPU at a time.
+
+1. Sign up at [modal.com](https://modal.com), add a payment method, and set the spend limit to **$0**.
+2. Modal → Settings → **API Tokens** → New token. Copy the token id and secret.
+3. GitHub repo → Settings → Secrets and variables → Actions → add `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, and `STUDIO_MODAL_SECRET` (a long random password you make up).
+4. GitHub → **Actions → "Deploy video server to Modal" → Run workflow** (keep "Download the model weights" ticked the first time; it takes 20–40 min).
+5. Open the finished run: its summary shows `MODAL_ENDPOINT_URL`. In Vercel add `MODAL_ENDPOINT_URL` and `MODAL_API_SECRET` (= your `STUDIO_MODAL_SECRET`), then redeploy.
+6. In the Studio pick **Wan 2.2 14B · Your Modal GPU**. Settings → Save & test connection shows "Reachable · … on H200".
+
+The first video after a quiet period waits ~1–3 min while the GPU starts and loads the model; following clips (e.g. Film Studio shots) reuse the warm GPU.
+
 ## 4. Optional extras
 
 - **GitHub Pages frontend:** in `frontend/config.js`, set `apiBase: 'https://<project>.vercel.app'`. In the repo go to Settings → Pages → Source: **GitHub Actions** (the workflow is included). In Vercel, add `ALLOWED_ORIGINS=https://<user>.github.io` and redeploy.
@@ -144,6 +161,7 @@ What it is not: a single 30 s AI generation. No free model generates 30 s native
 | Public Spaces can be busy, restarting or renamed. You get a clear "Space unavailable" error, and the Space can be switched with `HF_SPACE_OVERRIDES` | known risk |
 | Reloading the page during a free generation stops it (the connection closes). The studio marks it *interrupted* | by design |
 | Resize to 720p/1080p and fps changes are post-processing; they add no AI detail. Motion interpolation synthesizes frames | labelled in the export |
+| Modal provider | Code checked and the HTTP contract tested against a local double; **not yet run on a real Modal GPU** (no Modal account here). Speed and cost per clip are estimates | first run is yours |
 | Audio | LTX-2.3 native AI audio (free) · your uploaded music · Wan is silent · no AI voiceover/SFX |
 | LTX-2.3 license | LTX-2 Community License: free under US$10M annual revenue; outputs must be disclosed as AI-generated. Wan 2.2 is Apache-2.0 |
 

@@ -87,11 +87,18 @@ function toast(title, msg = '', kind = '') {
   $('#toasts')?.appendChild(el);
   setTimeout(() => el.remove(), 6500);
 }
-function streamModels() {
-  const p = st.catalog?.providers?.huggingface;
-  return p ? Object.entries(p.models).map(([id, m]) => ({ id, ...m })) : [];
+// Every FREE provider's models (Hugging Face Spaces + your own Modal app). Paid providers are never used here.
+function freeProviders() {
+  return Object.entries(st.catalog?.providers || {}).filter(([, p]) => p.free);
 }
-const capsOf = (id) => st.catalog?.providers?.huggingface?.models?.[id] || null;
+function streamModels() {
+  return freeProviders().flatMap(([pid, p]) => Object.entries(p.models).map(([id, m]) => ({ id, provider: pid, providerLabel: p.label, configured: p.configured, ...m })));
+}
+const providerOf = (modelId) => freeProviders().find(([, p]) => p.models[modelId])?.[0] || null;
+const capsOf = (id) => {
+  const pid = providerOf(id);
+  return pid ? st.catalog.providers[pid].models[id] : null;
+};
 function shotModel(shot) {
   return capsOf(shot.model) ? shot.model : st.film.model;
 }
@@ -164,6 +171,7 @@ function renderIdea() {
     .map((m) => {
       const ok = !needT2v || (m.modes || ['i2v']).includes('t2v');
       const tags = [`≤${m.durations.max} s/clip`, `${m.fps} fps`, [...new Set(m.ratios.map((r) => r.resolution))].join('/'), (m.modes || []).includes('t2v') ? 'text→video' : 'photo→video', m.nativeAudio ? 'AI audio' : 'silent', m.license || ''];
+      if (m.configured === false && m.provider !== 'huggingface') tags.unshift('not set up');
       return `<button class="model ${m.id === f.model ? 'on' : ''} ${ok ? '' : 'off-fit'}" data-fmodel="${m.id}" ${ok ? '' : 'disabled title="This model needs a photo"'}><div class="top"><b>${esc(m.label)}</b><span class="q">${esc(m.quality)}</span></div><div class="specs">${tags.filter(Boolean).map((t) => `<span>${esc(t)}</span>`).join('')}</div></button>`;
     })
     .join('') || '<p class="warn">Model list unavailable — check Settings → Backend.</p>';
@@ -226,12 +234,15 @@ function renderTimeline() {
     .join('');
   if (!f.shots.length) return ($('#fsTimelineNote').textContent = '');
   const maxNative = Math.max(...f.shots.map((s) => capsOf(shotModel(s))?.durations.max || 0));
-  const gpu = f.shots.filter((s) => s.status !== 'done' || s.outdated).reduce((a, s) => a + shotGpu(s), 0);
+  const pending = f.shots.filter((s) => s.status !== 'done' || s.outdated);
+  const gpu = pending.filter((s) => providerOf(shotModel(s)) === 'huggingface').reduce((a, s) => a + shotGpu(s), 0);
+  const modalShots = pending.filter((s) => providerOf(shotModel(s)) === 'modal').length;
   const daily = st.catalog?.providers?.huggingface?.quota?.freeSecondsPerDay || 300;
   const q = lastQuota();
   const parts = [
     `${f.shots.length} AI clip${f.shots.length > 1 ? 's' : ''} · ${fmtS(total)} of native AI video${f.shots.length > 1 ? ` → about ${fmtS(Math.max(0, total - (f.shots.length - 1) * (f.export.transitionSeconds || 0.5)))} assembled with crossfades` : ''}. Longest single clip: ${maxNative} s (model limit).`,
     gpu ? `Remaining shots reserve ≈${gpu} s of ZeroGPU time (free accounts: ${daily} s/day${q?.left != null ? `; Hugging Face last reported ${q.left} s left` : ''}).` : '',
+    modalShots ? `${modalShots} shot${modalShots > 1 ? 's' : ''} on your Modal GPU: roughly US$${(0.1 * modalShots + 0.3).toFixed(2)} of your US$30 monthly credits (estimate; consecutive shots reuse the warm GPU).` : '',
   ];
   $('#fsTimelineNote').textContent = parts.filter(Boolean).join(' ');
   const warn = gpu > daily ? `This plan needs more GPU time than a free account gets in one day (${gpu} s vs ${daily} s). Generate part today and the rest tomorrow, use shorter shots or Fast quality, or a PRO account (40 min/day).` : '';
@@ -412,6 +423,42 @@ async function inputImageFor(shot, i, caps, ratio) {
   return (await prepareForGeneration(`film_${f.id}_${f.photoVersion || 0}`, await bitmapFromBlob(photo), ratio, { x: 0.5, y: 0.5 }, { maxDataUriBytes: 3_600_000 })).dataUri;
 }
 
+// Polled providers (your Modal app): submit, then read status until the clip is ready.
+async function pollJob(provider, body, set) {
+  const { taskId } = await api.generate(body, { timeoutMs: 90_000 });
+  set({ note: 'Submitted to your Modal app', taskId });
+  const signal = st.abort.signal;
+  const onAbort = () => api.cancel(provider, taskId).catch(() => {});
+  signal.addEventListener('abort', onAbort, { once: true });
+  const started = Date.now();
+  let hiccups = 0;
+  try {
+    for (;;) {
+      if (signal.aborted) throw Object.assign(new Error('Cancelled'), { code: 'CANCELLED' });
+      if (Date.now() - started > 15 * 60_000) throw Object.assign(new Error('No result after 15 minutes.'), { code: 'TIMEOUT' });
+      let s;
+      try {
+        s = await api.status(provider, taskId);
+        hiccups = 0;
+      } catch (e) {
+        if (e.retryable && ++hiccups < 4) {
+          await new Promise((res) => setTimeout(res, 4000));
+          continue;
+        }
+        throw e;
+      }
+      if (s.state === 'succeeded') return { taskId, seed: s.seed ?? null };
+      if (s.state === 'failed') throw Object.assign(new Error(s.failure || 'The job failed without a reason.'), { code: 'GENERATION_FAILED' });
+      if (s.state === 'cancelled') throw Object.assign(new Error('Cancelled'), { code: 'CANCELLED' });
+      if (s.state === 'running') set({ progress: s.progress, note: s.step != null ? `Step ${s.step} of ${s.steps} (reported by your Modal app)` : 'Generating on your Modal GPU' });
+      else set({ note: s.note || 'Waiting for your Modal GPU' });
+      await new Promise((res) => setTimeout(res, st.catalog.providers[provider]?.pollIntervalMs || 4000));
+    }
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
 async function generateShot(shot) {
   const f = st.film;
   const i = f.shots.indexOf(shot);
@@ -430,8 +477,10 @@ async function generateShot(shot) {
     const image = await inputImageFor(shot, i, caps, ratio);
     const prompt = shotPrompt(shot, f.bible, { isFirst: i === 0 });
     const neg = caps.negativePrompt ? NEG_IDS.map((id) => byId(PROTECTIONS, id)?.neg).filter(Boolean).join(', ') : undefined;
+    const provider = providerOf(modelId);
+    const prov = st.catalog.providers[provider];
     const body = {
-      provider: 'huggingface',
+      provider,
       model: modelId,
       mode: image ? 'i2v' : 't2v',
       image: image || undefined,
@@ -442,21 +491,28 @@ async function generateShot(shot) {
       quality: (caps.qualityPresets || []).some((q) => q.id === f.quality) ? f.quality : undefined,
     };
     const est = gpuSeconds(caps, { ratio, duration: shot.duration, quality: f.quality });
-    const r = await api.generate(body, {
-      signal: st.abort.signal,
-      timeoutMs: 6 * 60_000,
-      onEvent: (ev) => {
-        if (ev.type === 'queued') set({ note: `In the Space queue${ev.size ? ` · ${ev.position + 1} of ${ev.size}` : ''}` });
-        else if (ev.type === 'started') set({ note: 'GPU allocated — generating' });
-        else if (ev.type === 'retrying') set({ note: 'The Space crashed — retrying once…' });
-        else if (ev.type === 'progress') set({ progress: ev.progress, note: `Step ${Math.min(ev.step + 1, ev.steps)} of ${ev.steps} (reported by the Space)` });
-        else if (ev.type === 'saving') set({ note: 'Receiving the clip…', progress: 1 });
-      },
-    });
-    let blob = r.blob;
-    if (!blob && r.outputs?.[0]) blob = await api.downloadBlob('huggingface', null, `shot-${shot.id}`, r.outputs[0]);
-    if (!blob) throw Object.assign(new Error('The Space finished but the clip could not be saved.'), { code: 'PROVIDER_ERROR' });
-    gpuTally.add(est);
+    let r;
+    let blob;
+    if (prov.mode === 'stream') {
+      r = await api.generate(body, {
+        signal: st.abort.signal,
+        timeoutMs: 6 * 60_000,
+        onEvent: (ev) => {
+          if (ev.type === 'queued') set({ note: `In the Space queue${ev.size ? ` · ${ev.position + 1} of ${ev.size}` : ''}` });
+          else if (ev.type === 'started') set({ note: 'GPU allocated — generating' });
+          else if (ev.type === 'retrying') set({ note: 'The Space crashed — retrying once…' });
+          else if (ev.type === 'progress') set({ progress: ev.progress, note: `Step ${Math.min(ev.step + 1, ev.steps)} of ${ev.steps} (reported by the Space)` });
+          else if (ev.type === 'saving') set({ note: 'Receiving the clip…', progress: 1 });
+        },
+      });
+      blob = r.blob;
+      if (!blob && r.outputs?.[0]) blob = await api.downloadBlob(provider, null, `shot-${shot.id}`, r.outputs[0]);
+      if (est) gpuTally.add(est);
+    } else {
+      r = await pollJob(provider, body, set);
+      blob = await api.downloadBlob(provider, r.taskId, `shot-${shot.id}`);
+    }
+    if (!blob) throw Object.assign(new Error('The model finished but the clip could not be saved.'), { code: 'PROVIDER_ERROR' });
     set({ note: 'Reading the last frame for the next shot…' });
     const last = await extractLastFrame(blob);
     dropUrl(`film_clip_${shot.id}`);

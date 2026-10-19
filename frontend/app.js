@@ -352,7 +352,7 @@ function renderModelSettings() {
   $('#modelCards').innerHTML = Object.entries(state.catalog.providers)
     .map(([pid, prov]) => {
       const configured = state.health ? state.health.providers?.[pid]?.configured : prov.configured;
-      const head = `<div class="model-group"><span>${esc(prov.label)}</span>${prov.free ? '<span class="badge live">Free</span>' : '<span class="badge">Paid</span>'}${configured === false ? `<span class="badge warn">${pid === 'huggingface' ? 'HF_TOKEN not set' : 'key not set'}</span>` : ''}</div>`;
+      const head = `<div class="model-group"><span>${esc(prov.label)}</span>${prov.free ? '<span class="badge live">Free</span>' : '<span class="badge">Paid</span>'}${configured === false ? `<span class="badge warn">${pid === 'huggingface' ? 'HF_TOKEN not set' : pid === 'modal' ? 'Modal not set up' : 'key not set'}</span>` : ''}</div>`;
       const cards = Object.entries(prov.models)
         .map(([id, m]) => {
           const durs = m.durations.exact ? m.durations.exact.join('/') + 's' : `${m.durations.min}–${m.durations.max}s`;
@@ -421,6 +421,10 @@ function renderCost() {
   const bal = state.health?.providers?.[state.controls.provider]?.account?.creditBalance;
   let est;
   const quota = p?.quota;
+  if (c.free && c.costEstimate) {
+    line.innerHTML = `<span><b>Free</b> · your Modal credits — <span title="${esc(c.costEstimate.note)}">≈US$0.08–0.45 per clip of your US$${p?.quota?.monthlyUsd || 30}/month (estimate)</span></span>`;
+    return;
+  }
   if (c.free) {
     const g = gpuSeconds(c, state.controls);
     const acct = state.health?.providers?.[state.controls.provider]?.account;
@@ -1266,12 +1270,22 @@ async function pollGeneration(job, hooks = {}) {
     const credits = s.credits || {};
     if (s.state === 'queued' || s.state === 'throttled') {
       set({ status: s.state, progress: null, estimatedCredits: credits.estimated ?? gen.estimatedCredits });
-      step('queue', 'active', s.state === 'throttled' ? 'THROTTLED — waiting for a free slot on your provider tier' : 'PENDING — waiting for a GPU');
+      step('queue', 'active', s.state === 'throttled' ? 'THROTTLED — waiting for a free slot on your provider tier' : s.note ? `PENDING — ${s.note}` : 'PENDING — waiting for a GPU');
     } else if (s.state === 'running') {
       set({ status: 'running', progress: s.progress, estimatedCredits: credits.estimated ?? gen.estimatedCredits });
-      step('render', 'active', s.progress != null ? `RUNNING — ${Math.round(s.progress * 100)}% reported by provider` : 'RUNNING — provider did not report a percentage');
+      step('render', 'active', s.step != null && s.steps ? `RUNNING — step ${s.step} of ${s.steps} reported by ${providerInfo(gen.provider)?.label || 'provider'}` : s.progress != null ? `RUNNING — ${Math.round(s.progress * 100)}% reported by provider` : 'RUNNING — provider did not report a percentage');
     } else if (s.state === 'succeeded') {
       if (!s.outputs?.length) throw new ApiError({ code: 'PROVIDER_ERROR', message: 'Provider reported success but returned no video URL.' });
+      if (providerInfo(gen.provider)?.downloadFirst) {
+        // Private outputs (your own Modal app): copy the file into this browser through the backend.
+        step('final', 'active', 'SUCCEEDED — copying the video to this browser');
+        const blob = await api.downloadBlob(gen.provider, gen.taskId, `gen-${gen.id}`);
+        await imageStore.put(`video_${gen.id}`, blob);
+        set({ status: 'succeeded', progress: 1, videoUrl: s.outputs[0], localVideo: true, videoBytes: blob.size, seedUsed: s.seed ?? undefined, completedAt: new Date().toISOString() });
+        hooks.progressDone?.();
+        hooks.success?.(gen);
+        return;
+      }
       set({ status: 'succeeded', progress: 1, videoUrl: s.outputs[0], videoUrlAt: new Date().toISOString(), chargedCredits: credits.charged, completedAt: new Date().toISOString() });
       step('final', 'active', 'SUCCEEDED — loading the video file');
       hooks.progressDone?.();
@@ -1862,10 +1876,12 @@ function renderDiag() {
   } else {
     lines.push(['Backend', `Reachable (${esc(api.base || location.origin)})`, 'ok']);
     for (const [id, p] of Object.entries(h.providers || {})) {
-      const envName = id === 'huggingface' ? 'HF_TOKEN' : 'RUNWAY_API_KEY';
-      const optional = !state.catalog?.providers?.[id]?.free;
-      lines.push([`${p.label} ${id === 'huggingface' ? 'token' : 'API key'}`, p.configured ? 'Configured on server' : optional ? `Not set (optional, paid) — ${envName}` : `Missing — set ${envName}`, p.configured ? 'ok' : optional ? 'mid' : 'bad']);
-      if (p.account?.user) lines.push([`${p.label} account`, `@${esc(p.account.user)} · ${esc(p.account.plan)} (${esc(p.account.quotaNote)})`, 'ok']);
+      const envName = id === 'huggingface' ? 'HF_TOKEN' : id === 'modal' ? 'MODAL_ENDPOINT_URL + MODAL_API_SECRET' : 'RUNWAY_API_KEY';
+      const optional = id !== 'huggingface';
+      const kind = id === 'huggingface' ? 'token' : id === 'modal' ? 'app' : 'API key';
+      lines.push([`${p.label} ${kind}`, p.configured ? 'Configured on server' : optional ? `Not set (optional${state.catalog?.providers?.[id]?.free ? ', free credits' : ', paid'}) — ${envName}` : `Missing — set ${envName}`, p.configured ? 'ok' : optional ? 'mid' : 'bad']);
+      if (p.account?.gpu) lines.push([`${p.label}`, `Reachable · ${esc(p.account.model)} on ${esc(p.account.gpu)} (${esc(p.account.quotaNote)})`, 'ok']);
+      else if (p.account?.user) lines.push([`${p.label} account`, `@${esc(p.account.user)} · ${esc(p.account.plan)} (${esc(p.account.quotaNote)})`, 'ok']);
       else if (p.account) lines.push([`${p.label} credits`, `${p.account.creditBalance?.toLocaleString() ?? '—'}`, p.account.creditBalance > 0 ? 'ok' : 'mid']);
       if (p.accountError && p.accountError.code !== 'FORBIDDEN') lines.push([`${p.label} account`, esc(p.accountError.message), 'bad']);
     }

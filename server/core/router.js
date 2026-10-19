@@ -236,6 +236,7 @@ const routes = {
       headers = provider.fileHeaders(videoUrl);
     } else {
       ({ videoUrl } = await provider.getResult(taskIdFrom(url.searchParams.get('id'))));
+      headers = provider.fileHeaders?.(videoUrl) || {}; // e.g. your private Modal app
     }
     // Busy Spaces run several replicas behind one URL; the finished file exists only on the
     // replica that generated it, and the others answer 403/404. Retrying lets the load
