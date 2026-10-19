@@ -47,6 +47,11 @@ function loadFilms() {
     st.films = [];
   }
   // A reload interrupts a running shot — say so instead of showing it as still running.
+  // v2: continued shots join with a seamless cut — a crossfade overlays two frames (ghosting).
+  for (const f of st.films) {
+    if ((f.v || 1) < 2) for (const s of f.shots || []) if (s.continuity === 'continue' && (!s.transition || s.transition === 'crossfade')) s.transition = 'cut';
+    f.v = 2;
+  }
   for (const f of st.films) for (const s of f.shots || []) if (['queued', 'running'].includes(s.status)) Object.assign(s, { status: 'failed', error: { title: 'Interrupted', message: 'The page was reloaded while this shot was generating. Generate it again.' } });
 }
 function save() {
@@ -60,6 +65,7 @@ function save() {
 function newFilm() {
   const f = {
     id: uid('film'),
+    v: 2,
     title: 'Untitled film',
     createdAt: new Date().toISOString(),
     source: 'photo',
@@ -283,7 +289,7 @@ function shotCard(s, i) {
       <label>Length<select class="input" data-f="duration">${durs.map((d) => `<option value="${d}" ${d === Number(s.duration) ? 'selected' : ''}>${d} s</option>`).join('')}</select></label>
       <label>Model<select class="input" data-f="model"><option value="" ${!s.model ? 'selected' : ''}>Film default</option>${models}</select></label>
       <label class="wide">Starts from<select class="input" data-f="continuity">${cont.map(([v, l]) => `<option value="${v}" ${v === s.continuity ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      ${i > 0 ? `<label>Transition in<select class="input" data-f="transition">${TRANSITIONS.map((t) => `<option value="${t.id}" ${t.id === (s.transition || 'crossfade') ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>` : ''}
+      ${i > 0 ? `<label>Transition in<select class="input" data-f="transition">${TRANSITIONS.map((t) => `<option value="${t.id}" ${t.id === (s.transition || (s.continuity === 'continue' ? 'cut' : 'crossfade')) ? 'selected' : ''}>${t.id === 'cut' && s.continuity === 'continue' ? 'Seamless cut (recommended)' : t.label}</option>`).join('')}</select></label>` : ''}
       <details class="wide fs-prompt"><summary>Exact prompt sent (${prompt.length} chars)</summary><p>${esc(prompt)}</p></details>
       ${err}${stale}
       <div class="wide row gap-s wrap fs-actions">
@@ -801,7 +807,8 @@ function bind() {
     if (!el || !li) return;
     const s = st.film.shots.find((x) => x.id === li.dataset.shot);
     const k = el.dataset.f;
-    if (el.tagName !== 'SELECT') return; // text fields are saved on input; re-rendering on blur would swallow clicks
+    if (el.tagName !== 'SELECT') return;
+    if (k === 'continuity' && el.value === 'continue' && (!s.transition || s.transition === 'crossfade')) s.transition = 'cut'; // text fields are saved on input; re-rendering on blur would swallow clicks
     s[k] = k === 'duration' ? Number(el.value) : el.value;
     save();
     renderPlanLight(s);
@@ -832,7 +839,7 @@ function bind() {
   $('#fsAddShot').addEventListener('click', () => {
     const f = st.film;
     const c = filmCaps();
-    f.shots.push({ id: uid('shot'), title: `Shot ${f.shots.length + 1}`, action: `${f.bible?.subject || 'the subject'} continue naturally`, camera: 'push_in', duration: c?.durations.presets?.[0] || 5, continuity: f.shots.length ? 'continue' : f.hasPhoto ? 'photo' : 'text', transition: 'crossfade', model: '', status: 'idle' });
+    f.shots.push({ id: uid('shot'), title: `Shot ${f.shots.length + 1}`, action: `${f.bible?.subject || 'the subject'} continue naturally`, camera: 'push_in', duration: c?.durations.presets?.[0] || 5, continuity: f.shots.length ? 'continue' : f.hasPhoto ? 'photo' : 'text', transition: f.shots.length ? 'cut' : 'none', model: '', status: 'idle' });
     save();
     renderPlan();
   });

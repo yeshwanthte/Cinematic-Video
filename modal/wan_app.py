@@ -39,12 +39,23 @@ SCALEDOWN = int(os.environ.get("STUDIO_MODAL_SCALEDOWN", "120"))  # seconds a wa
 
 MODEL_ID = "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
 BF16_ID = "cbensimon/Wan2.2-I2V-A14B-bf16-Diffusers"  # same weights stored in bf16 (half the download)
+# Step-distillation (4-step "Lightning") LoRAs.
+# Preferred: the official lightx2v LoRA pair trained FOR Wan 2.2 I2V A14B — one per expert, strength 1.0.
+# The older Wan 2.1 LoRA (used by the public Space) has to be fused at 3× on the high-noise expert,
+# which is a known cause of slow-motion movement and smeared / double outlines.
+LORA22_REPO = "lightx2v/Wan2.2-Distill-Loras"
+LORA22_HIGH = "wan2.2_i2v_A14b_high_noise_lora_rank64_lightx2v_4step_1022.safetensors"
+LORA22_LOW = "wan2.2_i2v_A14b_low_noise_lora_rank64_lightx2v_4step_1022.safetensors"
+LORA22_SCALE_HIGH = float(os.environ.get("STUDIO_LORA_HIGH", "1.0"))
+LORA22_SCALE_LOW = float(os.environ.get("STUDIO_LORA_LOW", "1.0"))
+# Fallback (only if the Wan 2.2 pair cannot be loaded): the Space's Wan 2.1 LoRA and its settings.
 LORA_REPO = "Kijai/WanVideo_comfy"
 LORA_FILE = "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors"
+VIDEO_QUALITY = 8  # imageio/ffmpeg quality 0–10 (was 5): fewer compression smears on hair and edges
 FPS = 16
 MIN_FRAMES, MAX_FRAMES = 8, 80
 MODELS_DIR = "/models"
-DEFAULT_NEGATIVE = "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 最差质量, 低质量, JPEG压缩残留, 畸形的, 多余的手指, 静止不动的画面"
+DEFAULT_NEGATIVE = "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 最差质量, 低质量, JPEG压缩残留, 畸形的, 多余的手指, 静止不动的画面, 慢动作, 重影, 残影, 双重曝光, 运动拖影, 画面闪烁"
 
 app = modal.App(APP_NAME)
 volume = modal.Volume.from_name("cinematic-studio-models", create_if_missing=True)
@@ -107,6 +118,8 @@ def download_weights():
     snapshot_download(MODEL_ID, ignore_patterns=["transformer/*", "transformer_2/*"])  # pipeline parts
     snapshot_download(BF16_ID, allow_patterns=["transformer/*", "transformer_2/*"])  # bf16 experts
     hf_hub_download(LORA_REPO, LORA_FILE)
+    for f in (LORA22_HIGH, LORA22_LOW):
+        hf_hub_download(LORA22_REPO, f)
     volume.commit()
     print("Weights ready in the Modal Volume 'cinematic-studio-models'.")
 
@@ -135,14 +148,37 @@ class Wan:
             transformer_2=WanTransformer3DModel.from_pretrained(BF16_ID, subfolder="transformer_2", **kw),
             **kw,
         ).to("cuda")
-        # Lightning (lightx2v) step-distillation LoRA, fused exactly like the official Space.
+        self.lora = self._load_loras()
+        print(f"Wan 2.2 loaded in {time.time() - t0:.0f}s with LoRA: {self.lora}")
+
+    def _load_loras(self) -> str:
+        from huggingface_hub import hf_hub_download
+
+        try:
+            for f in (LORA22_HIGH, LORA22_LOW):
+                hf_hub_download(LORA22_REPO, f)  # cached in the Volume; downloads once (~1.4 GB) if missing
+            volume.commit()
+            # Load BOTH before fusing anything, so a failure leaves the base model untouched.
+            self.pipe.load_lora_weights(LORA22_REPO, weight_name=LORA22_HIGH, adapter_name="w22_high", local_files_only=True)
+            self.pipe.load_lora_weights(LORA22_REPO, weight_name=LORA22_LOW, adapter_name="w22_low", load_into_transformer_2=True, local_files_only=True)
+            self.pipe.set_adapters(["w22_high", "w22_low"], adapter_weights=[1.0, 1.0])
+            self.pipe.fuse_lora(adapter_names=["w22_high"], lora_scale=LORA22_SCALE_HIGH, components=["transformer"])
+            self.pipe.fuse_lora(adapter_names=["w22_low"], lora_scale=LORA22_SCALE_LOW, components=["transformer_2"])
+            self.pipe.unload_lora_weights()
+            return f"wan2.2-lightx2v-1022 ({LORA22_SCALE_HIGH:g}/{LORA22_SCALE_LOW:g})"
+        except Exception as e:  # incompatible key format, download failure, …
+            print(f"Wan 2.2 LoRA pair could not be used ({e!r}); falling back to the Wan 2.1 LoRA.")
+            try:
+                self.pipe.unload_lora_weights()
+            except Exception:
+                pass
         self.pipe.load_lora_weights(LORA_REPO, weight_name=LORA_FILE, adapter_name="lightx2v", local_files_only=True)
         self.pipe.load_lora_weights(LORA_REPO, weight_name=LORA_FILE, adapter_name="lightx2v_2", load_into_transformer_2=True, local_files_only=True)
         self.pipe.set_adapters(["lightx2v", "lightx2v_2"], adapter_weights=[1.0, 1.0])
         self.pipe.fuse_lora(adapter_names=["lightx2v"], lora_scale=3.0, components=["transformer"])
         self.pipe.fuse_lora(adapter_names=["lightx2v_2"], lora_scale=1.0, components=["transformer_2"])
         self.pipe.unload_lora_weights()
-        print(f"Wan 2.2 loaded in {time.time() - t0:.0f}s")
+        return "wan2.1-lightx2v (fallback, 3/1)"
 
     @modal.method()
     def generate(self, job_id: str, image: str, last_image: str | None, prompt: str, negative_prompt: str,
@@ -178,10 +214,10 @@ class Wan:
             callback_on_step_end=on_step,
         ).frames[0]
         with tempfile.NamedTemporaryFile(suffix=".mp4") as f:
-            export_to_video(frames, f.name, fps=FPS)
+            export_to_video(frames, f.name, fps=FPS, quality=VIDEO_QUALITY)
             video = open(f.name, "rb").read()
         progress[job_id] = {"status": "succeeded", "step": int(steps), "steps": int(steps)}
-        return {"video": video, "seed": used_seed, "width": w, "height": h, "frames": len(frames), "fps": FPS}
+        return {"video": video, "seed": used_seed, "width": w, "height": h, "frames": len(frames), "fps": FPS, "lora": self.lora}
 
 
 # ---------------------------------------------------------------- the HTTP API (CPU, costs ~nothing)
@@ -239,7 +275,7 @@ def api():
         p = (progress.get(job_id) or {}) if job_id else {}
         try:
             out = call.get(timeout=0)
-            return {"status": "succeeded", "progress": 1, "seed": out.get("seed"), "width": out.get("width"), "height": out.get("height"), "fps": out.get("fps"), "frames": out.get("frames")}
+            return {"status": "succeeded", "progress": 1, "seed": out.get("seed"), "width": out.get("width"), "height": out.get("height"), "fps": out.get("fps"), "frames": out.get("frames"), "lora": out.get("lora")}
         except TimeoutError:
             if p.get("status") == "running":
                 steps = p.get("steps") or 1

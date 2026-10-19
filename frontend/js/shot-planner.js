@@ -24,7 +24,7 @@ export const FILM_PRESETS = {
     lighting: 'soft window light with gentle falloff',
     beats: [
       { title: 'Presence', action: '{subject} breathe naturally and blink, hair moving slightly', camera: 'push_in' },
-      { title: 'Expression', action: 'a soft, natural smile slowly forms on {subject}', camera: 'static' },
+      { title: 'Expression', action: 'a soft, natural smile forms on {subject}', camera: 'static' },
       { title: 'Turn', action: '{subject} turn the head gently toward the light', camera: 'orbit' },
       { title: 'Close', action: '{subject} hold a calm, confident gaze', camera: 'push_in' },
     ],
@@ -32,7 +32,7 @@ export const FILM_PRESETS = {
   product: {
     label: 'Product showcase',
     look: 'premium commercial look, clean reflections, crisp edges',
-    lighting: 'controlled studio light with a slow, elegant light sweep',
+    lighting: 'controlled studio light with an elegant light sweep',
     beats: [
       { title: 'Reveal', action: '{subject} is revealed as light glides across its surface', camera: 'pull_out' },
       { title: 'Hero orbit', action: 'the camera circles {subject}, highlights travelling over materials', camera: 'orbit' },
@@ -43,9 +43,9 @@ export const FILM_PRESETS = {
   nature: {
     label: 'Nature',
     look: 'documentary nature look, rich natural colour',
-    lighting: 'soft natural daylight shifting slowly',
+    lighting: 'soft natural daylight shifting naturally',
     beats: [
-      { title: 'Wide', action: 'wind moves through {subject}, clouds drifting slowly', camera: 'pan_right' },
+      { title: 'Wide', action: 'wind moves through {subject}, clouds drifting', camera: 'pan_right' },
       { title: 'Layers', action: 'foreground foliage sways while the background stays calm', camera: 'parallax' },
       { title: 'Life', action: 'water, leaves and light move naturally across {subject}', camera: 'dolly' },
       { title: 'Rise', action: 'the view of {subject} opens up toward the sky', camera: 'crane_up' },
@@ -87,7 +87,7 @@ export const FILM_PRESETS = {
   },
 };
 
-const MOTION_SPEED = { subtle: 'very slow, gentle', balanced: 'slow, smooth', dynamic: 'steady, purposeful', cinematic: 'deliberate, sweeping' };
+const MOTION_SPEED = { subtle: 'gentle, real-time', balanced: 'smooth, real-time', dynamic: 'brisk, purposeful', cinematic: 'smooth, motivated' };
 
 function subjectFromIdea(idea) {
   const text = String(idea || '');
@@ -134,7 +134,7 @@ export function planShots({ idea = '', preset = 'travel', targetSeconds = 15, ma
       camera: beat.camera,
       duration,
       continuity: i === 0 ? (source === 'text' ? 'text' : 'photo') : 'continue',
-      transition: i === 0 ? 'none' : 'crossfade',
+      transition: i === 0 ? 'none' : 'cut',
     };
   });
   return { bible, shots, preset };
@@ -156,7 +156,7 @@ export function shotPrompt(shot, bible = {}, { isFirst = false } = {}) {
         : `Keep ${bible.subject || 'the subject'}, faces, clothing and the composition of the photo exactly as they are.`,
     bible.lighting ? `${cap(bible.lighting)}.` : '',
     bible.look ? `${cap(bible.look)}.` : '',
-    'Natural, physically plausible motion with stable anatomy, no flicker and no sudden scene change.',
+    'Real-time speed at normal playback; natural, physically plausible motion with stable anatomy, crisp clean outlines and consistent lighting throughout.',
   ];
   let text = parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
   if (isFirst && shot.continuity === 'text' && bible.setting) text = `${cap(bible.setting)}. ${text}`;

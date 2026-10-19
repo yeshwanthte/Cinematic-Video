@@ -33,7 +33,7 @@
             "steps": "steps",
             "seed": "seed",
             "randomize": "randomize_seed",
-            "baseNegative": "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 最差质量, 低质量, JPEG压缩残留, 畸形的, 多余的手指, 静止不动的画面",
+            "baseNegative": "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 最差质量, 低质量, JPEG压缩残留, 畸形的, 多余的手指, 静止不动的画面, 慢动作, 重影, 残影, 双重曝光, 运动拖影, 画面闪烁",
             "fixed": {
               "guidance_scale": 1,
               "guidance_scale_2": 1
@@ -137,7 +137,7 @@
             "seed": "seed",
             "randomize": "randomize_seed",
             "frameMultiplier": "frame_multiplier",
-            "baseNegative": "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 最差质量, 低质量, JPEG压缩残留, 畸形的, 多余的手指, 静止不动的画面",
+            "baseNegative": "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 最差质量, 低质量, JPEG压缩残留, 畸形的, 多余的手指, 静止不动的画面, 慢动作, 重影, 残影, 双重曝光, 运动拖影, 画面闪烁",
             "fixed": {
               "guidance_scale": 1,
               "guidance_scale_2": 1,
@@ -222,7 +222,7 @@
             {
               "value": 32,
               "label": "32 fps",
-              "note": "RIFE-interpolated in the Space (in-between frames are synthesized, not new AI motion)",
+              "note": "RIFE-interpolated in the Space: in-between frames are synthesized (not new AI motion) and can show ghosting on fast movement, faces and hair. Use 16 fps for the cleanest result",
               "multiplier": 32,
               "interpolated": true
             }

@@ -3,15 +3,15 @@
 //   person | face | hair | fabric | sky | water | foliage
 
 export const INTENSITY = {
-  subtle: { label: 'Subtle', speed: 'very slow, gentle', amount: 'minimal, restrained' },
-  balanced: { label: 'Natural', speed: 'slow, smooth', amount: 'natural, moderate' },
-  dynamic: { label: 'Dynamic', speed: 'steady, purposeful', amount: 'clearly visible, energetic yet controlled' },
-  cinematic: { label: 'Cinematic', speed: 'deliberate, sweeping', amount: 'bold, motivated and fluid, like a feature-film camera move' },
+  subtle: { label: 'Subtle', speed: 'gentle, real-time', amount: 'minimal, restrained' },
+  balanced: { label: 'Natural', speed: 'smooth, real-time', amount: 'natural, moderate' },
+  dynamic: { label: 'Dynamic', speed: 'brisk, purposeful', amount: 'clearly visible, energetic yet controlled' },
+  cinematic: { label: 'Cinematic', speed: 'smooth, motivated', amount: 'bold, motivated and fluid, like a feature-film camera move' },
 };
 
 export const CAMERA = [
-  { id: 'push_in', label: 'Slow Push In', hint: 'Draws the eye to the subject', phrase: (s, t) => `The camera performs a ${s} push-in toward ${t}` },
-  { id: 'pull_out', label: 'Slow Pull Out', hint: 'Reveals the wider scene', phrase: (s) => `The camera pulls back in a ${s} move, gradually revealing more of the scene` },
+  { id: 'push_in', label: 'Push In', hint: 'Draws the eye to the subject', phrase: (s, t) => `The camera performs a ${s} push-in toward ${t}` },
+  { id: 'pull_out', label: 'Pull Out', hint: 'Reveals the wider scene', phrase: (s) => `The camera pulls back in a ${s} move, gradually revealing more of the scene` },
   { id: 'pan_left', label: 'Pan Left', hint: 'Horizontal sweep', phrase: (s) => `The camera pans to the left in a ${s} sweep` },
   { id: 'pan_right', label: 'Pan Right', hint: 'Horizontal sweep', phrase: (s) => `The camera pans to the right in a ${s} sweep` },
   { id: 'tilt_up', label: 'Tilt Up', hint: 'Reveal height', phrase: (s) => `The camera tilts upward in a ${s} motion` },
@@ -31,10 +31,10 @@ export const SUBJECT = [
   { id: 'clothing', label: 'Clothing in wind', phrase: 'clothing and fabric ripple softly in the wind', needs: ['fabric'] },
   { id: 'blink', label: 'Natural blinking', phrase: 'the subject blinks naturally', needs: ['face'] },
   { id: 'head', label: 'Slight head movement', phrase: 'the subject makes a slight, natural head movement', needs: ['face'] },
-  { id: 'walking', label: 'Walking', phrase: 'the subject walks forward with a natural, unhurried gait', needs: ['person'] },
+  { id: 'walking', label: 'Walking', phrase: 'the subject walks forward with a natural walking pace', needs: ['person'] },
   { id: 'running', label: 'Running', phrase: 'the subject runs forward with a natural, athletic stride', needs: ['person'] },
   { id: 'dancing', label: 'Dancing', phrase: 'the subject dances with fluid, rhythmic and natural body movement', needs: ['person'] },
-  { id: 'turning', label: 'Turning', phrase: 'the subject turns slowly and naturally', needs: ['person'] },
+  { id: 'turning', label: 'Turning', phrase: 'the subject turns naturally at a normal pace', needs: ['person'] },
   { id: 'looking', label: 'Looking around', phrase: 'the subject gently looks around, eyes shifting naturally', needs: ['face'] },
   { id: 'smile', label: 'Smiling naturally', phrase: 'a soft, natural smile gradually forms', needs: ['face'] },
   { id: 'interaction', label: 'Environmental interaction', phrase: 'the subject interacts naturally with the surroundings', needs: ['person'] },
@@ -42,10 +42,10 @@ export const SUBJECT = [
 
 export const ENVIRONMENT = [
   { id: 'wind', label: 'Wind', phrase: 'a light breeze moves through the scene' },
-  { id: 'clouds', label: 'Clouds', phrase: 'clouds drift slowly across the sky', needs: ['sky'] },
+  { id: 'clouds', label: 'Clouds', phrase: 'clouds drift across the sky', needs: ['sky'] },
   { id: 'rain', label: 'Rain', phrase: 'light rain falls steadily with soft droplets' },
-  { id: 'fog', label: 'Fog', phrase: 'thin fog drifts slowly through the scene' },
-  { id: 'smoke', label: 'Smoke', phrase: 'wisps of smoke curl and rise slowly' },
+  { id: 'fog', label: 'Fog', phrase: 'thin fog drifts through the scene' },
+  { id: 'smoke', label: 'Smoke', phrase: 'wisps of smoke curl and rise' },
   { id: 'water', label: 'Water movement', phrase: 'water ripples and flows naturally', needs: ['water'] },
   { id: 'trees', label: 'Trees moving', phrase: 'leaves and branches sway gently', needs: ['foliage'] },
   { id: 'sunlight', label: 'Sunlight shifting', phrase: 'sunlight shifts subtly as the light gently changes across the scene' },
@@ -56,7 +56,7 @@ export const ENVIRONMENT = [
 export const STYLES = [
   { id: 'photoreal', label: 'Photorealistic', blurb: 'True-to-life, no stylisation.', phrase: 'Photorealistic, true-to-life detail and natural light; no stylisation.', camera: 'push_in', intensity: 'balanced', env: ['ambient'] },
   { id: 'cinematic', label: 'Cinematic Film', blurb: 'Natural movement, filmic camera, realistic depth.', phrase: 'Filmic look with realistic depth and natural cinematic pacing.', camera: 'push_in', intensity: 'balanced', env: ['ambient'] },
-  { id: 'luxury', label: 'Luxury', blurb: 'Elegant slow camera, premium lighting.', phrase: 'Elegant, unhurried motion with refined, premium lighting transitions.', camera: 'dolly', intensity: 'subtle', env: ['sunlight'] },
+  { id: 'luxury', label: 'Luxury', blurb: 'Elegant camera, premium lighting.', phrase: 'Elegant, controlled motion with refined, premium lighting transitions.', camera: 'dolly', intensity: 'subtle', env: ['sunlight'] },
   { id: 'travel', label: 'Travel Film', blurb: 'Lively environment, cinematic camera.', phrase: 'Travel-film energy with lively, natural environmental motion.', camera: 'crane_up', intensity: 'dynamic', env: ['wind', 'clouds'] },
   { id: 'wedding', label: 'Wedding', blurb: 'Soft, romantic, natural expressions.', phrase: 'Soft, romantic atmosphere with tender, natural expressions.', camera: 'push_in', intensity: 'subtle', subject: ['natural', 'clothing'], env: ['sunlight'] },
   { id: 'realestate', label: 'Real Estate', blurb: 'Smooth architectural moves, true verticals.', phrase: 'Smooth architectural camera movement with controlled perspective; vertical lines stay perfectly straight.', camera: 'dolly', intensity: 'subtle', env: ['sunlight'] },
@@ -64,7 +64,7 @@ export const STYLES = [
   { id: 'fashion', label: 'Fashion', blurb: 'Editorial camera, controlled motion.', phrase: 'Editorial camera movement with confident, controlled motion.', camera: 'orbit', intensity: 'balanced', subject: ['clothing', 'head'] },
   { id: 'documentary', label: 'Documentary', blurb: 'Natural handheld, observational.', phrase: 'Natural, observational documentary feel.', camera: 'handheld', intensity: 'balanced', env: ['ambient'] },
   { id: 'dramatic', label: 'Dramatic', blurb: 'Stronger camera, atmospheric motion.', phrase: 'Bold, atmospheric motion with a moody, dramatic feel.', camera: 'crane_up', intensity: 'dynamic', env: ['fog', 'clouds'] },
-  { id: 'dreamy', label: 'Dreamy', blurb: 'Soft, floating, atmospheric depth.', phrase: 'Soft, floating movement with atmospheric depth and a gentle ethereal feel.', camera: 'pull_out', intensity: 'subtle', env: ['dust', 'sunlight'] },
+  { id: 'dreamy', label: 'Dreamy', blurb: 'Soft, floating, atmospheric depth.', phrase: 'Soft, airy movement with atmospheric depth and an ethereal feel.', camera: 'pull_out', intensity: 'subtle', env: ['dust', 'sunlight'] },
   { id: 'animation', label: 'Animation', blurb: 'Animated-film look, expressive motion.', phrase: 'Polished animated-film look with clean shapes and expressive, fluid motion.', camera: 'orbit', intensity: 'dynamic', env: ['wind'] },
   { id: 'artistic', label: 'Artistic', blurb: 'Painterly, stylised, poetic.', phrase: 'Artistic, painterly rendering with poetic, stylised movement.', camera: 'parallax', intensity: 'subtle', env: ['dust', 'sunlight'] },
 ];
@@ -87,20 +87,20 @@ export const PROTECTIONS = [
 export const CATEGORY = {
   portrait: { label: 'Portrait', traits: ['person', 'face', 'hair', 'fabric'], camera: 'push_in', subject: ['blink', 'hair'], env: ['ambient'], style: 'portrait', intensity: 'subtle', recommend: 'Subtle push-in + natural blinking + hair movement' },
   group: { label: 'Group photo', traits: ['person', 'face', 'fabric'], camera: 'push_in', subject: ['natural', 'smile'], env: ['ambient'], style: 'cinematic', intensity: 'subtle', recommend: 'Gentle push-in + natural subtle movement' },
-  wedding: { label: 'Wedding', traits: ['person', 'face', 'hair', 'fabric'], camera: 'push_in', subject: ['natural', 'clothing'], env: ['sunlight'], style: 'wedding', intensity: 'subtle', recommend: 'Slow cinematic push-in + subtle natural movement' },
-  landscape: { label: 'Landscape', traits: ['sky'], camera: 'pan_right', subject: [], env: ['clouds', 'wind'], style: 'cinematic', intensity: 'subtle', recommend: 'Slow camera movement + cloud movement + atmospheric depth' },
+  wedding: { label: 'Wedding', traits: ['person', 'face', 'hair', 'fabric'], camera: 'push_in', subject: ['natural', 'clothing'], env: ['sunlight'], style: 'wedding', intensity: 'subtle', recommend: 'Smooth cinematic push-in + subtle natural movement' },
+  landscape: { label: 'Landscape', traits: ['sky'], camera: 'pan_right', subject: [], env: ['clouds', 'wind'], style: 'cinematic', intensity: 'subtle', recommend: 'Smooth camera movement + cloud movement + atmospheric depth' },
   nature: { label: 'Nature', traits: ['foliage'], camera: 'parallax', subject: [], env: ['trees', 'wind', 'sunlight'], style: 'cinematic', intensity: 'subtle', recommend: 'Gentle parallax + swaying foliage + shifting light' },
-  architecture: { label: 'Architecture', traits: ['sky'], camera: 'dolly', subject: [], env: ['ambient', 'clouds'], style: 'realestate', intensity: 'subtle', recommend: 'Slow dolly + parallax + subtle environmental movement' },
+  architecture: { label: 'Architecture', traits: ['sky'], camera: 'dolly', subject: [], env: ['ambient', 'clouds'], style: 'realestate', intensity: 'subtle', recommend: 'Smooth dolly + parallax + subtle environmental movement' },
   interior: { label: 'Interior', traits: [], camera: 'dolly', subject: [], env: ['sunlight', 'dust'], style: 'realestate', intensity: 'subtle', recommend: 'Smooth dolly-in + shifting sunlight' },
-  exterior: { label: 'Exterior', traits: ['sky', 'foliage'], camera: 'crane_up', subject: [], env: ['clouds', 'trees'], style: 'realestate', intensity: 'subtle', recommend: 'Slow crane up + drifting clouds + gentle foliage' },
+  exterior: { label: 'Exterior', traits: ['sky', 'foliage'], camera: 'crane_up', subject: [], env: ['clouds', 'trees'], style: 'realestate', intensity: 'subtle', recommend: 'Smooth crane up + drifting clouds + gentle foliage' },
   vehicle: { label: 'Vehicle', traits: [], camera: 'orbit', subject: [], env: ['dust', 'ambient'], style: 'dramatic', intensity: 'balanced', recommend: 'Smooth orbit + ambient particles' },
-  product: { label: 'Product', traits: [], camera: 'orbit', subject: [], env: ['sunlight'], style: 'luxury', intensity: 'subtle', recommend: 'Slow orbit + elegant light sweep' },
+  product: { label: 'Product', traits: [], camera: 'orbit', subject: [], env: ['sunlight'], style: 'luxury', intensity: 'subtle', recommend: 'Smooth orbit + elegant light sweep' },
   travel: { label: 'Travel', traits: ['sky', 'person'], camera: 'crane_up', subject: ['natural'], env: ['wind', 'clouds'], style: 'travel', intensity: 'balanced', recommend: 'Crane up + wind + drifting clouds' },
-  other: { label: 'General', traits: [], camera: 'push_in', subject: [], env: ['ambient'], style: 'cinematic', intensity: 'subtle', recommend: 'Slow push-in + ambient movement' },
+  other: { label: 'General', traits: [], camera: 'push_in', subject: [], env: ['ambient'], style: 'cinematic', intensity: 'subtle', recommend: 'Smooth push-in + ambient movement' },
 };
 
 export const VARIATIONS = [
-  { id: 'v_push', label: 'Slow push-in', camera: 'push_in' },
+  { id: 'v_push', label: 'Push-in', camera: 'push_in' },
   { id: 'v_orbit', label: 'Orbit', camera: 'orbit' },
   { id: 'v_parallax', label: 'Parallax', camera: 'parallax' },
   { id: 'v_pull', label: 'Cinematic pull-out', camera: 'pull_out' },

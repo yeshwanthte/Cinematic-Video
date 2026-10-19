@@ -202,7 +202,8 @@ Rewrite the user's idea into ONE professional motion prompt. Rules:
 - The image already defines what is visible. Describe MOTION only: subject action, environmental motion, camera motion, intensity, direction, speed and timing.
 - Do not re-describe objects, colours, clothing or scenery already in the image.
 - Use positive phrasing (say what should happen, e.g. "facial features remain stable"), never "no X" or "don't".
-- Keep the subject's identity and the composition consistent. Physically plausible, smooth, restrained motion.
+- Keep the subject's identity and the composition consistent. Physically plausible motion at natural, real-time speed with crisp, clean outlines.
+- Never use the words "slow", "slowly", "gentle", "unhurried" or "eases in/out" unless the user explicitly asks for slow motion — video models render them as slow motion.
 - Respect the selected controls in the context JSON; drop any motion that contradicts the photo analysis.
 - Plain prose, 2–5 sentences, no lists, no quotes, under ${maxChars} characters.
 Reply with the prompt text only.`;

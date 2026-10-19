@@ -256,7 +256,7 @@ const EXAMPLES = [
   { id: 'portrait', label: 'Portrait', motion: 'Push-in · blink · hair', style: 'portrait' },
   { id: 'travel', label: 'Travel', motion: 'Crane up · wind · clouds', style: 'travel' },
   { id: 'architecture', label: 'Architecture', motion: 'Dolly · parallax · light', style: 'realestate' },
-  { id: 'wedding', label: 'Wedding', motion: 'Slow push-in · soft fabric', style: 'wedding' },
+  { id: 'wedding', label: 'Wedding', motion: 'Push-in · soft fabric', style: 'wedding' },
   { id: 'product', label: 'Product', motion: 'Orbit · light sweep', style: 'luxury' },
   { id: 'landscape', label: 'Landscape', motion: 'Pan · drifting clouds', style: 'cinematic' },
 ];

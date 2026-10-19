@@ -43,9 +43,11 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const joinList = (arr) => (arr.length <= 1 ? arr.join('') : `${arr.slice(0, -1).join(', ')} and ${arr[arr.length - 1]}`);
 const sentence = (s) => (s ? cap(s.trim().replace(/[.\s]+$/, '')) + '.' : '');
 
+// Wan/LTX take speed words literally: "slow", "gentle", "eases in/out" produce slow motion.
+// Every prompt therefore states real-time speed explicitly.
 function timingSentence(duration, intensity) {
-  const pace = intensity === 'cinematic' ? 'unfolds as one deliberate, sweeping feature-film move' : intensity === 'dynamic' ? 'builds confidently' : intensity === 'balanced' ? 'holds a steady pace' : 'stays unhurried';
-  return `Motion eases in, ${pace} and eases out smoothly across the full ${duration} seconds.`;
+  const pace = intensity === 'cinematic' ? 'one continuous, motivated camera move' : intensity === 'dynamic' ? 'energetic, clearly visible action' : intensity === 'balanced' ? 'natural, lifelike movement' : 'small, natural movements';
+  return `Real-time speed at normal playback: ${pace} across the full ${duration} seconds, with crisp, clean outlines.`;
 }
 
 /**
@@ -55,6 +57,9 @@ function timingSentence(duration, intensity) {
  * @param {number} s.duration  @param {object|null} s.analysis  @param {object} s.caps (model capabilities)
  * @param {string} [s.extra] user-specific action text to keep verbatim
  */
+// Always sent to models with a negative-prompt input: blocks slow motion and ghosting.
+export const ANTI_ARTIFACT_NEG = 'slow motion, ghosting, double exposure, duplicated outlines, translucent overlapping body parts, motion trails, morphing, flickering';
+
 export function buildPrompt(s) {
   const traits = traitsFrom(s.analysis);
   const intensity = INTENSITY[s.intensity] || INTENSITY.balanced;
@@ -110,7 +115,7 @@ export function buildPrompt(s) {
   }
   if (prompt.length > max) prompt = prompt.slice(0, max - 1).replace(/\s+\S*$/, '') + '.';
 
-  const negativePrompt = supportsNeg ? prots.map((p) => p.neg).join(', ') : '';
+  const negativePrompt = supportsNeg ? [...prots.map((p) => p.neg), ANTI_ARTIFACT_NEG].filter(Boolean).join(', ') : '';
   return { prompt, negativePrompt, dropped };
 }
 
